@@ -46,8 +46,10 @@ export function stepAgents(
     let c = pop.components[i] as number;
     let m = pop.membrane[i] as number;
 
-    // 1. Feed: what the agent gains, the field loses.
-    e += K.energyYield * env.consume(x, y, K.grazeRate * env.nutrient(x, y));
+    // 1. Feed: what the agent gains, the field loses. Sensing gain sets how
+    // strongly this agent takes up nutrient, at an upkeep cost.
+    const gain = pop.gain[i] as number;
+    e += K.energyYield * env.consume(x, y, K.grazeRate * (0.5 + gain) * env.nutrient(x, y));
 
     // 2. Produce: energy becomes components.
     const build = params.productionCut ? 0 : (pop.build[i] as number);
@@ -55,10 +57,12 @@ export function stepAgents(
     e -= made;
     c += made;
 
-    // 3. Repair: components rebuild the membrane against constant decay.
+    // 3. Repair: components rebuild the membrane against decay, which grows
+    // with age, so no agent is immortal at break-even.
     const repair = Math.min(c, K.repairRate * (1 - m));
     c -= repair;
-    m = Math.min(1, m + repair) - params.membraneDecay;
+    const decay = params.membraneDecay * (1 + (pop.age[i] as number) / K.agingTime);
+    m = Math.min(1, m + repair) - decay;
 
     if (m <= 0) {
       // Die: the membrane is gone and the contents spill into the field.
@@ -75,13 +79,13 @@ export function stepAgents(
     const g = Math.hypot(grad.x, grad.y);
     if (g > 0) {
       const err = wrapAngle(Math.atan2(grad.y, grad.x) - h);
-      h += K.turnRate * (pop.gain[i] as number) * Math.tanh(g / K.gradientScale) * err;
+      h += K.turnRate * gain * Math.tanh(g / K.gradientScale) * err;
     }
     h = wrapAngle(h + params.sensingNoise * gaussian(rng));
     const speed = K.maxSpeed * (pop.motility[i] as number);
     x = wrap(x + Math.cos(h) * speed, size);
     y = wrap(y + Math.sin(h) * speed, size);
-    e = Math.max(0, e - K.basalCost - K.moveCost * speed);
+    e = Math.max(0, e - K.basalCost - K.uptakeCost * gain - K.moveCost * speed);
 
     // 6. Signal: a little v, so agents feed back on the pattern.
     env.emit(x, y, K.signalRate);

@@ -28,9 +28,10 @@ describe('protocell rules', () => {
     const pop = one({ build: 0, motility: 0 });
     const env = new StubEnv(0.8);
     run(pop, env, quiet, 1);
-    expect(env.consumed).toBeCloseTo(METABOLISM.grazeRate * 0.8);
+    expect(env.consumed).toBeCloseTo(METABOLISM.grazeRate * (0.5 + 0.5) * 0.8);
     const leak = METABOLISM.leakRate * (1 - (pop.membrane[0] as number));
-    const expected = (0.5 + METABOLISM.energyYield * env.consumed) * (1 - leak) - METABOLISM.basalCost;
+    const expected =
+      (0.5 + METABOLISM.energyYield * env.consumed) * (1 - leak) - METABOLISM.basalCost - METABOLISM.uptakeCost * 0.5;
     expect(pop.energy[0]).toBeCloseTo(expected, 5);
   });
 
@@ -53,6 +54,25 @@ describe('protocell rules', () => {
     run(pop, new StubEnv(1), { ...quiet, divisionEnergy: Infinity }, 300);
     expect(pop.count).toBe(1);
     expect(pop.membrane[0]).toBeGreaterThan(DEFAULT_AGENT_PARAMS.divisionMembrane);
+  });
+
+  it('takes up more nutrient with higher sensing gain', () => {
+    const low = new StubEnv(0.6);
+    const high = new StubEnv(0.6);
+    run(one({ gain: 0.2, motility: 0 }), low, quiet, 1);
+    run(one({ gain: 0.8, motility: 0 }), high, quiet, 1);
+    expect(high.consumed / low.consumed).toBeCloseTo(1.3 / 0.7);
+  });
+
+  it('ages: with ample food and components, an agent still dies of old age', () => {
+    const pop = one({ motility: 0, components: 10 });
+    const env = new StubEnv(1);
+    const params = { ...quiet, divisionEnergy: Infinity };
+    run(pop, env, params, 1000);
+    expect(pop.count).toBe(1);
+    // Repair is capped at repairRate × (1 − M), so death comes once decay passes repairRate.
+    run(pop, env, params, 24000);
+    expect(pop.count).toBe(0);
   });
 
   it('steers up the nutrient gradient', () => {

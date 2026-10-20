@@ -34,7 +34,7 @@ export const AGENT_CAP = 5000;
  * not tuned against any test; see PROGRESS.md.
  */
 export const METABOLISM = {
-  /** u mass an agent tries to graze per tick, per unit of local u. */
+  /** u mass an agent tries to graze per tick, per unit of local u, at sensing gain 0.5. Uptake scales with 0.5 + gain. */
   grazeRate: 20,
   /** Most of a block's u that its agents can take in one tick. */
   maxGrazeShare: 0.5,
@@ -42,12 +42,16 @@ export const METABOLISM = {
   energyYield: 0.002,
   /** Share of E turned into components per tick at build efficiency 1. */
   productionRate: 0.08,
+  /** Age in ticks at which membrane decay has doubled. Ageing guarantees turnover. */
+  agingTime: 2000,
   /** Components spent on repair per tick, per unit of missing membrane. */
   repairRate: 0.1,
   /** Share of E leaked per tick when the membrane is fully gone. */
   leakRate: 0.05,
   /** Energy spent per tick just to exist. */
   basalCost: 0.001,
+  /** Energy spent per tick per unit of sensing gain: the upkeep of uptake machinery. */
+  uptakeCost: 0.004,
   /** Energy spent per cell moved. */
   moveCost: 0.01,
   /** Distance moved per tick at motility 1, in cells. */

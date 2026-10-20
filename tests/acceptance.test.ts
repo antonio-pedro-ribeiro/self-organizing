@@ -10,12 +10,12 @@ import { StubEnv } from './helpers/StubEnv';
 
 /**
  * Headless acceptance tests from SPEC.md section 7, on the CPU reference
- * field. The field is 128² rather than 512² to keep runs short, so the
- * initial population is 50 rather than 200; see PROGRESS.md. One tick is
+ * field. The field is 256² rather than 512² to keep runs shorter, with 50
+ * initial agents: the same density as the default 200 on 512². One tick is
  * one frame, so 60 s is 3600 ticks.
  */
 const base: WorldConfig = {
-  fieldSize: 128,
+  fieldSize: 256,
   seed: 1,
   initialAgents: 50,
   fieldStepsPerTick: 8,
@@ -24,7 +24,7 @@ const base: WorldConfig = {
 };
 
 const TICKS_PER_SECOND = 60;
-const LONG_MS = 300_000;
+const LONG_MS = 900_000;
 
 describe('test 4: autopoiesis', () => {
   it('with production cut, every agent dies within 200 ticks', () => {

@@ -30,7 +30,7 @@ Gate results at the time (`npm test`, 34 tests; M3 changed the numbers, see belo
 - **Spatial hash use:** the hash is used for membrane separation, so overlapping discs push apart. This is local physics, not a group rule.
 - **Metabolic constants** (`METABOLISM` in `src/agents/params.ts`) are first guesses. They were not tuned against any test.
 
-## M3 Coupling: gate NOT passed (test 5 fails)
+## M3 Coupling: gate NOT passed (test 6 fails since the follow-up below)
 
 ### Carrying capacity (user chose option 1: hungrier agents)
 
@@ -68,9 +68,19 @@ Gate results at the time (`npm test`, 34 tests; M3 changed the numbers, see belo
 - **Test 6 judging:** pre-damage level is the mean over the 200 ticks before damage; recovery is judged on a 100-tick moving mean.
 - **Damage:** "wipe" resets the field to u = 1, v = 0 and removes the agents in the disc with no death burst. Core functions `World.damage`, `CpuField.wipe` and `wipeAgents` exist; the browser tool is M4.
 
+### M3 follow-up (2026-10-20)
+
+- **Test 5, model change (user decision):** sensing gain now also scales uptake, `grazeRate × (0.5 + gain) × u`. It carries an upkeep cost of 0.004 × gain energy per tick, so higher gain is a trade-off rather than a free gain. Test 5 now passes: CV **0.151**, mean response 0.165.
+- **Ageing (user decision):** membrane decay is `membraneDecay × (1 + age / 2000)`, so no agent is immortal at break-even. This was added because the uptake cost put the 128² test population into a frozen state: exactly 50 agents for 2000 ticks, with no births or deaths.
+- **Acceptance tests moved to 256² with 50 agents,** the same density as the default 200 on 512². The earlier 50 on 128² was 4× the default density. Whole suite: about 5 minutes.
+- **512² with ageing** (default setup): 623 agents at tick 500, 2070 at 1000, then 2600–2800 from tick 1500 to 3000. Mean gain rises from 0.5 to 0.84 despite its cost. Mean u falls to 0.47, and spots are gone by tick 1500.
+- **Test 6 now FAILS** at 256² default density. The seeded population never divides (exactly 50 at tick 1000), dies of old age as one cohort around tick 2000, and falls to 3 after damage with no recovery in 60 s. Tests 4, 5 and 7 pass.
+- **Root cause, unresolved:** a seeded agent breaks even at about u = 0.78, which is almost exactly the Mitosis field's background u. Whether a population takes off depends on chance early conditions: it grows at 512², and freezes at 128² and 256². Two options are on the table and waiting for a decision:
+  - give seeded agents a margin (break-even about 0.5), so populations grow reliably but erase the pattern;
+  - redesign the energy model so agents cannot draw u below the pattern regime.
+
 ## Next
 
-1. Decide how to address test 5: a model change (a gene that shapes uptake) or a different reading of the test.
-2. Decide the agent–pattern trade-off above.
-3. Run the browser check for M3: agents visible, trails, view modes, frame rate.
-4. M4 after the gate passes.
+1. Decide the energy-balance question above (test 6 and the agent–pattern trade-off).
+2. Run the browser check for M3: agents visible, trails, view modes, frame rate.
+3. M4 was started at the user's request with the M3 gate still open (test 6).
