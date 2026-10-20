@@ -38,8 +38,13 @@ export const METABOLISM = {
   grazeRate: 20,
   /** Most of a block's u that its agents can take in one tick. */
   maxGrazeShare: 0.5,
-  /** Energy gained per unit of u mass grazed. */
-  energyYield: 0.002,
+  /**
+   * Energy gained per unit of u mass grazed. 0.0025 is the lowest tested
+   * value at which seeded populations grow reliably at the default density
+   * (0.002 froze at 128² and 256²) while staying under the agent cap at 512²
+   * (0.003 and above reached it); see PROGRESS.md.
+   */
+  energyYield: 0.0025,
   /** Share of E turned into components per tick at build efficiency 1. */
   productionRate: 0.08,
   /** Age in ticks at which membrane decay has doubled. Ageing guarantees turnover. */

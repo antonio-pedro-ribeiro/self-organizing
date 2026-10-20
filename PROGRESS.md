@@ -174,10 +174,29 @@ Assumptions:
 - **Test 3 duration:** run for a fixed time per seed (1500 ticks headless, 6000 in the browser), long enough for Mitosis to fill the field at each size.
 - **Wavelength metric limit:** for patterns that do not fill the field (Worms and Chaos after 25 s), the largest-scale contrast dominates and the wavelength reads 512.
 
-## Energy-balance decision (user, 2026-10-20)
+## Energy-balance decision (user, 2026-10-20): applied
 
-Agents **may** erase the Gray–Scott pattern. Lower the seeded agents' break-even u from about 0.78 to about 0.5, so populations grow reliably at every size and test 6 becomes a real test. Next, after M6.
+**Decision:** agents **may** erase the Gray–Scott pattern; make seeded populations grow reliably so test 6 becomes a real test. The stated target was to lower break-even to about u = 0.5.
+
+**What break-even actually was:** a median seeded agent (all genes 0.5) divides only once its energy reaches 1.0. With energy yield 0.002 that needs u ≈ 1.27 even with no competition, which is above the maximum of 1. So a typical seeded agent could never divide; only lucky genomes (low build) could. That is why 128² and 256² froze while 512² grew.
+
+**Measured** (CPU reference, default density: 50 agents on 256², 200 on 512², Mitosis, 2500 ticks):
+
+| Energy yield | 256² | 512² |
+| --- | --- | --- |
+| 0.002 (old) | frozen at 50 | grows only by chance (2600–2800) |
+| **0.0025 (chosen)** | 50 → 365 (t500) → ~1000 from t1500, mean u 0.40 | 200 → 3052 (t500) → 4000–4200 from t750, mean u 0.36–0.39 |
+| 0.003 | ~1250–1400, mean u 0.32–0.36 | **at the 5000 cap** from t500 |
+| 0.0035 | ~1600–1740, mean u 0.29–0.31 | not run (above 0.003) |
+| 0.005 | ~2400–3000, mean u 0.25 | **at the 5000 cap** from t250 |
+
+**Deviation, stated plainly:** the literal target (break-even u ≈ 0.5, a yield of about 0.005) is incompatible with keeping the carrying capacity below the 5000 cap, which was the user's earlier option-1 decision. The lower agents' break-even, the further they graze u down and the more agents the feed supports. 0.0025 is the lowest tested yield that grows reliably at default density at both sizes, and it stays under the cap. With it, a median seeded agent still needs u ≈ 1.0 to divide. Growth comes from genetic variation, and selection then lowers build (0.5 → 0.25) and raises gain (0.5 → 0.8). The 512² population still creeps up slowly (4000 → 4213 between t1500 and t2500) as gain evolves; the remaining headroom to the cap is about 800.
+
+**Results with 0.0025:**
+- **Test 6 passes for real:** pre-damage mean 982.6 agents (256²); the 25% wipe removed 251 (25.5%), leaving 723 (73.6%, below the 80% target, so the precondition holds). The 100-tick moving mean was back to 80% at tick 181 (3.0 s, limit 60 s).
+- **Unit tests:** 54 pass. The CPU field's Mitosis-growth test got an explicit 30 s timeout: it timed out at 6.7 s against Vitest's 5 s default when test files ran in parallel (it passes alone in about 5 s).
+- **Full acceptance suite:** still running when this was committed; only test 6 had been run on its own (above). Results follow in the next commit.
 
 ## Next
 
-1. Apply the energy-balance decision above, then re-run the acceptance tests (test 6 in particular).
+1. Optional: a browser check that the default app population stays under the cap over long runs (512² headless: 4213 at t2500, slowly rising).

@@ -45,7 +45,7 @@ describe('CpuField', () => {
     const start = hotShare(field);
     field.step(4000, PRESETS.mitosis);
     expect(hotShare(field)).toBeGreaterThan(3 * start);
-  });
+  }, 30_000); // 4000 steps of 128²: about 5 s, more when test files run in parallel
 
   it('reads back block means', () => {
     const field = new CpuField(16);

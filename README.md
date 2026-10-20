@@ -1,6 +1,6 @@
 # self-organizing
 
-A browser-based simulator of a self-organizing digital system: a GPU reaction-diffusion field (Gray–Scott) that will be populated by protocell agents. It illustrates Fritjof Capra's account of self-organization: dissipative structures, autopoiesis and cognition. The full specification is in [SPEC.md](SPEC.md); current status is in [PROGRESS.md](PROGRESS.md).
+A browser-based simulator of a self-organizing digital system: a GPU reaction-diffusion field (Gray–Scott) that will be populated by protocell agents. It illustrates Fritjof Capra's account of self-organization: dissipative structures, autopoiesis and cognition. The full specification is in [SPEC.md](SPEC.md); current status is in [PROGRESS.md](PROGRESS.md). **New users: start with the [User Manual](docs/USER_MANUAL.md)** ([Manual do Utilizador](docs/MANUAL_DO_UTILIZADOR.md) em português).
 
 ## Run
 
