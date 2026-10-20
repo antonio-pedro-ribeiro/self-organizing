@@ -170,10 +170,12 @@ describe('test 6: resilience', () => {
       if (recent.length === 100 && mean >= 0.8 * pre) recoveredAt = t;
     }
     console.info(
-      `test 6: pre-damage mean ${pre.toFixed(1)}, removed ${removed}, lowest ${lowest}, ` +
+      `test 6: pre-damage mean ${pre.toFixed(1)}, removed ${removed} (left ${after}), lowest ${lowest}, ` +
         (recoveredAt > 0 ? `recovered at tick ${recoveredAt} (${(recoveredAt / TICKS_PER_SECOND).toFixed(1)} s)` : 'did not recover'),
     );
     expect(removed).toBeGreaterThan(0);
+    // Precondition: if the wipe leaves 80% standing, there is no recovery to test.
+    expect(after).toBeLessThan(0.8 * pre);
     expect(recoveredAt).toBeGreaterThan(0);
   }, LONG_MS);
 });

@@ -42,11 +42,11 @@ export class Trails {
     this.current = next;
   }
 
-  /** Add the trail onto the screen inside the field viewport. */
-  composite(view: Viewport): void {
+  /** Add the trail onto `target` inside the field viewport. */
+  composite(target: WebGLFramebuffer | null, view: Viewport): void {
     if (this.size === 0) return;
     const { gl } = this;
-    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, target);
     gl.viewport(view.x, view.y, view.size, view.size);
     gl.enable(gl.BLEND);
     gl.blendFunc(gl.ONE, gl.ONE);

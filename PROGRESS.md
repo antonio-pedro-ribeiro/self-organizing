@@ -104,7 +104,43 @@ Assumptions and deviations:
 - **Visual artefact:** death bursts show as hard-edged squares, because emitted v is spread evenly over an 8×8 block. For M5: smooth the emission in the apply shader.
 - **Headless vs browser:** at the same density, the headless 256² test population freezes, while the 512² browser run grows (about 2500 agents after 20 s, matching the headless 512² run). This fits the break-even explanation under M3: whether a population takes off depends on early conditions.
 
+## M5 Visual polish: gate passed (test 8)
+
+Built:
+- **Bloom (Must):** the scene renders into an RGBA16F target. A bright pass with a soft knee (threshold 0.55) and a two-iteration 9-tap separable Gaussian run at half resolution, and the composite has a strength slider (default 0.8) and a toggle (default on). `src/render/Bloom.ts`.
+- **Scene:** `src/render/Scene.ts` owns every renderer and draws a frame. Renderers take a target framebuffer.
+- **Network overlay (view 4, key `4`):** lines between agents within a signal range of 12 cells (about 1.5 blocks), with width and brightness scaled by coupling strength = 1 − distance/range. Built on the CPU with a spatial hash and drawn as instanced quads.
+- **Flow overlay:** 3000 particles drift along −∇u from the latest readback. Visual only, with its own random stream.
+- **Lineage view:** stacked shares of the 8 largest lineages over the last 300 samples. Each band uses the mean genome colour of its members, through `genomeColor`, which mirrors the shader. The rest show as grey.
+- **Perturbation brush:** click-drag with mode noise (adds v), nutrient (pushes u toward 1), or damage (wipes field and agents), plus a radius. Expanding ripple rings mark the brush. It replaces M4's click-to-damage.
+- **Smoother write-back:** the per-block update is interpolated bilinearly between block centres on both GPU and CPU, so death bursts no longer show as squares. Total v added stays exact; u removal is exact where a block's u is uniform and approximate elsewhere.
+- **Asynchronous readback:** the agent readback (and the metrics readback) now goes through a pixel buffer and fence. Agents sense the newest finished readback, normally the previous frame's, so their CPU work overlaps the GPU's field steps. This took 5000 agents from 53.6 fps to 60 fps. Headless runs are unchanged, because the CPU World is synchronous.
+
+Test 8 (`npm run test:e2e`) at 1920×1080, 512² field, 5000 agents, bloom on, all Must items on (field, discs, bloom, trails, plots):
+- **60.0, 60.0, 60.0 and 60.1 fps** over 10-second windows in four runs, with the population held at 5000.
+- **GPU:** Intel Iris Xe (integrated, through ANGLE/D3D11), which is below the spec's "M1-class or discrete GPU".
+- **How 5000 is held:** 5000 is above the natural carrying capacity, so the test sets membrane decay to 0 (its slider minimum). Agents then don't die and every rule still runs.
+- **Pass threshold:** the test uses ≥ 59.5 fps as "60 fps", because the frame callback is capped at the 60 Hz display rate.
+
+Before async readback: 53.6 fps. In the browser the agent step costs about 7–8 ms at 5000 agents (3.1 ms in a Node benchmark with uniform positions; clustering costs more in membrane separation). The GPU field plus readback costs about 6.6 ms.
+
+Overlay costs (10% rule), as frame work time with `?sync` (`gl.finish` at frame end), median of 3 interleaved runs, two repeats:
+- **Flow:** +7.2% and +7.8%. Under 10%, but **default off** anyway, for headroom on this GPU and because it adds visual clutter. A judgment call; one toggle.
+- **Network:** +24.9% and +21.6%. **Default off** (view 3).
+- **Lineage view:** +3.0% and +1.8%. **Default on.**
+
+Earlier single-sample measurements swung between −51% and +35%, so only the medians are used.
+
+Other results:
+- `npm test`: 51 tests, 50 pass.
+- **Test 6 fails, and its earlier pass is no longer counted.** After the smoothing change it briefly "passed" vacuously: the frozen population of 50 lost only 9 to the wipe, and 41 is above the 80% target. The test now has a precondition that the wipe must leave the population below the recovery target, so it fails honestly ("expected 41 to be less than 40"). Root cause unchanged; see M3.
+- Browser tests: tests 1 and 8, the overlay costs and the smoke test pass. Smoke test: 2649 protocells at 60 fps after 20 s.
+
+Known issues:
+- Chrome logs "READ-usage buffer was written, then fenced, but written again before being read back" for the readback buffer, about 256 times in 6 s (likely Chrome's cap). The fence is checked without blocking and 60 fps holds, so this is a slower read path, not a stall. Not resolved.
+- Network lines between close agents are partly hidden under the discs, which are drawn on top.
+
 ## Next
 
 1. Decide the energy-balance question under M3 (test 6 and the agent–pattern trade-off).
-2. M5: bloom, flow overlay, network overlay, lineage view, brush; gate test 8 (5000 agents at 60 fps with all Must items on).
+2. M6: bifurcation panel, capture, JSON state, presets complete; gate tests 2 and 3.

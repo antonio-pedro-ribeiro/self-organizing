@@ -21,16 +21,21 @@ export interface UiState {
   agents: AgentParams;
   /** Population seeded on reset. */
   initialAgents: number;
-  /** 1 field only, 2 agents only, 3 both (SPEC.md section 5). */
+  /** 1 field only, 2 agents only, 3 both, 4 both plus network (SPEC.md section 5). */
   view: ViewMode;
   trails: boolean;
-  /** When on, clicking the field wipes a disc of field and agents. */
-  damageOnClick: boolean;
-  /** Damage radius in field cells. */
-  damageRadius: number;
+  bloom: boolean;
+  bloomStrength: number;
+  flow: boolean;
+  lineageView: boolean;
+  /** What click-drag on the field does. */
+  brush: BrushMode;
+  /** Brush radius in field cells. */
+  brushRadius: number;
 }
 
-export type ViewMode = 1 | 2 | 3;
+export type ViewMode = 1 | 2 | 3 | 4;
+export type BrushMode = 'off' | 'noise' | 'nutrient' | 'damage';
 
 export interface UiActions {
   reset: () => void;
@@ -85,14 +90,24 @@ export function createControls(state: UiState, actions: UiActions): Controls {
   life.addBinding(state, 'initialAgents', { min: 0, max: 2000, step: 10, label: 'initial (on reset)' });
 
   const perturb = pane.addFolder({ title: 'Perturb and record' });
-  perturb.addBinding(state, 'damageOnClick', { label: 'click to damage' });
-  perturb.addBinding(state, 'damageRadius', { min: 8, max: 200, step: 1, label: 'damage radius' });
+  perturb.addBinding(state, 'brush', {
+    options: { Off: 'off', 'Add noise': 'noise', 'Add nutrient': 'nutrient', Damage: 'damage' },
+    label: 'drag brush',
+  });
+  perturb.addBinding(state, 'brushRadius', { min: 4, max: 200, step: 1, label: 'brush radius' });
   perturb.addButton({ title: 'Wipe 25% of the area' }).on('click', actions.damageQuarter);
   perturb.addButton({ title: 'Download metrics CSV' }).on('click', actions.downloadCsv);
 
   const look = pane.addFolder({ title: 'Look' });
-  look.addBinding(state, 'view', { options: { 'Field only (1)': 1, 'Agents only (2)': 2, 'Both (3)': 3 }, label: 'view' });
+  look.addBinding(state, 'view', {
+    options: { 'Field only (1)': 1, 'Agents only (2)': 2, 'Both (3)': 3, 'Both + network (4)': 4 },
+    label: 'view',
+  });
   look.addBinding(state, 'trails', { label: 'trails' });
+  look.addBinding(state, 'bloom', { label: 'bloom' });
+  look.addBinding(state, 'bloomStrength', { min: 0, max: 2, step: 0.05, label: 'bloom strength' });
+  look.addBinding(state, 'flow', { label: 'flow overlay' });
+  look.addBinding(state, 'lineageView', { label: 'lineage view' });
   look
     .addBinding(state, 'colormap', { options: toOptions(COLORMAP_NAMES), label: 'colormap' })
     .on('change', actions.colormapChanged);

@@ -105,18 +105,35 @@ void main() {
 }
 `;
 
-/** Agent write-back: per block, u is scaled by R and G is added to v. */
+/**
+ * Agent write-back: the per-block update is interpolated bilinearly between
+ * block centres (so bursts have no square edges), then u is scaled by R and
+ * G is added to v. Linear interpolation keeps the total v added exact.
+ */
 export const APPLY_FRAG = `#version 300 es
 precision highp float;
 uniform sampler2D uState;
 uniform sampler2D uUpdate;
 uniform int uBlock;
+uniform int uGrid;
 out vec4 outState;
+
+vec2 upd(ivec2 b) {
+  return texelFetch(uUpdate, (b + uGrid) % uGrid, 0).rg;
+}
 
 void main() {
   ivec2 p = ivec2(gl_FragCoord.xy);
   vec2 c = texelFetch(uState, p, 0).rg;
-  vec2 d = texelFetch(uUpdate, p / uBlock, 0).rg;
+  vec2 f = (vec2(p) + 0.5) / float(uBlock) - 0.5;
+  vec2 fl = floor(f);
+  ivec2 b = ivec2(fl);
+  vec2 t = f - fl;
+  vec2 d = mix(
+    mix(upd(b), upd(b + ivec2(1, 0)), t.x),
+    mix(upd(b + ivec2(0, 1)), upd(b + ivec2(1, 1)), t.x),
+    t.y
+  );
   outState = vec4(clamp(c.x * d.x, 0.0, 1.0), clamp(c.y + d.y, 0.0, 1.0), 0.0, 1.0);
 }
 `;
@@ -135,5 +152,32 @@ void main() {
   vec2 d = abs(gl_FragCoord.xy - uCenter);
   d = min(d, uSize - d);
   outState = length(d) < uRadius ? vec4(1.0, 0.0, 0.0, 1.0) : vec4(c, 0.0, 1.0);
+}
+`;
+
+/** Brush: mode 0 adds noise to v, mode 1 adds nutrient u; soft falloff inside the disc (torus distance). */
+export const BRUSH_FRAG = `#version 300 es
+precision highp float;
+uniform sampler2D uState;
+uniform vec2 uCenter;
+uniform float uRadius;
+uniform float uSize;
+uniform int uMode;
+uniform float uSeed;
+out vec4 outState;
+
+float hash(vec2 p) {
+  return fract(sin(dot(p + uSeed, vec2(12.9898, 78.233))) * 43758.5453);
+}
+
+void main() {
+  vec2 c = texelFetch(uState, ivec2(gl_FragCoord.xy), 0).rg;
+  vec2 d = abs(gl_FragCoord.xy - uCenter);
+  d = min(d, uSize - d);
+  float r = length(d) / uRadius;
+  float w = r < 1.0 ? 1.0 - r * r : 0.0;
+  if (uMode == 0) c.y = clamp(c.y + 0.3 * w * hash(gl_FragCoord.xy), 0.0, 1.0);
+  else c.x = clamp(c.x + 0.5 * w * (1.0 - c.x), 0.0, 1.0);
+  outState = vec4(c, 0.0, 1.0);
 }
 `;

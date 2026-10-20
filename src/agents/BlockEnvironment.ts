@@ -82,8 +82,10 @@ export class BlockEnvironment implements Environment {
   }
 
   /**
-   * Per-block field update as RG pairs: R multiplies u (so the block loses
-   * exactly the mass taken), G is added to v in every cell of the block.
+   * Per-block field update as RG pairs: R multiplies u (the block loses the
+   * mass taken), G is the v added per cell. The field interpolates both
+   * between block centres, which keeps total v exact, and u exact wherever
+   * a block's u is uniform.
    */
   writeUpdate(out: Float32Array): void {
     for (let b = 0; b < this.meanU.length; b++) {

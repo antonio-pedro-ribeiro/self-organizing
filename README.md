@@ -14,18 +14,18 @@ npm run test:e2e   # browser tests via Playwright, using the installed Chrome
 npm run build      # typecheck and production build
 ```
 
-Keys: `H` hides all UI, `Space` pauses, `1`/`2`/`3` show field only, agents only, or both.
+Keys: `H` hides all UI, `Space` pauses, `1`/`2`/`3`/`4` show field only, agents only, both, or both plus the signal network. Click-drag on the field with a **drag brush** mode set to add noise, add nutrient, or damage.
 
 ## Seeing each concept in the app
 
 | Concept | How to see it | Status |
 | --- | --- | --- |
-| Dissipative structure | Turn on **cut flux**: the pattern decays when the feed stops; turn it off and it regrows from the remaining seeds | M1 |
+| Dissipative structure | Turn on **cut flux**: the pattern decays when the feed stops (watch the order parameter plot fall); turn it off and it regrows from the remaining seeds. Turn on **flow overlay** to see nutrient streaming toward where it is consumed | M1, M5 |
 | Bifurcation | Drag **F** or **k** slowly, or switch presets: the field changes between spots, stripes and waves | M1 (automatic sweep panel in M6) |
 | Order through fluctuations | Change the **seed** and press **Reset with seed**: same parameters, different pattern details | M1 |
 | Autopoiesis | Protocells with production cut off disintegrate (headless test 4 in M2; visible in M3) | M2–M3 |
 | Structural coupling | Same perturbation, different response per protocell (headless test 5 currently fails; see PROGRESS.md) | M3 |
-| Emergence | Watch the **plots**: population, order parameter and dissipation change together as colonies spread, with no colony rule in the code | M4 |
+| Emergence | Watch the **plots** and the **lineage view**: population, order parameter and lineage shares change as colonies spread, with no colony rule in the code. Press `4` for the signal network | M4, M5 |
 | Cognition | Turn on **trails**: protocell paths curve up the nutrient gradient, away from spots | M3 |
 | Resilience | **Wipe 25% of the area** (or click to damage), then watch the population plot recover | M4 (headless test 6 currently fails; see PROGRESS.md) |
 
@@ -34,7 +34,7 @@ Keys: `H` hides all UI, `Space` pauses, `1`/`2`/`3` show field only, agents only
 ```
 src/field/    Gray–Scott on the GPU, CPU reference field, presets, initial state
 src/agents/   Protocell rules, population storage, spatial hash, block coupling, headless world
-src/render/   WebGL helpers, field renderer, colormaps, agent discs, trails
+src/render/   WebGL helpers, field, agent discs, trails, bloom, overlays, scene
 src/metrics/  Order parameter, dissipation, wavelength, closure index, rolling log
 src/ui/       Tweakpane controls, plots, input
 src/util/     Seeded PRNG

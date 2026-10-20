@@ -1,6 +1,6 @@
 import { BLOCK_SIZE, BlockEnvironment } from './agents/BlockEnvironment';
 import { wipeAgents } from './agents/damage';
-import { AGENT_CAP, DEFAULT_AGENT_PARAMS, DEFAULT_INITIAL_AGENTS, METABOLISM } from './agents/params';
+import { AGENT_CAP, DEFAULT_AGENT_PARAMS, DEFAULT_INITIAL_AGENTS } from './agents/params';
 import { Population } from './agents/Population';
 import { AgentScratch, stepAgents } from './agents/rules';
 import { seedPopulation } from './agents/seed';
@@ -9,14 +9,14 @@ import { FieldCoupling } from './field/FieldCoupling';
 import { GrayScott } from './field/GrayScott';
 import { DEFAULT_PRESET, FIELD_SIZE, PRESETS, type FieldParams } from './field/presets';
 import { createFieldSample, fillFromRgba } from './metrics/fieldMetrics';
+import { topLineages } from './metrics/lineages';
 import { MetricsLog } from './metrics/MetricsLog';
 import { METRICS_EVERY, METRICS_GRID, takeSample } from './metrics/sample';
-import { AgentRenderer } from './render/AgentRenderer';
-import { FieldRenderer, type Viewport } from './render/FieldRenderer';
 import { createGl } from './render/gl';
-import { Trails } from './render/Trails';
+import { Scene } from './render/Scene';
 import { createControls, type UiState } from './ui/controls';
 import { bindInput } from './ui/input';
+import { createLineageChart } from './ui/lineageChart';
 import { createPlots } from './ui/plots';
 import { mulberry32, type Rng } from './util/prng';
 
@@ -24,13 +24,21 @@ import { mulberry32, type Rng } from './util/prng';
 const EASE_TIME_CONSTANT_S = 0.12;
 /** At high speed, run at most this many ticks per frame. */
 const MAX_TICKS_PER_FRAME = 4;
-/** Discs are drawn larger than the physical radius so they read on screen. */
-const DISC_DRAW_SCALE = 2;
+/** While dragging, a new ripple every this many ms. */
+const RIPPLE_EVERY_MS = 150;
 
 declare global {
   interface Window {
     /** Present only with `?test` in the URL, for the Playwright tests. */
-    __selforg?: { state: UiState; log: MetricsLog; reset: () => void; refresh: () => void };
+    __selforg?: {
+      state: UiState;
+      log: MetricsLog;
+      reset: () => void;
+      refresh: () => void;
+      /** Frames drawn since load; mean frame work and simulation time in ms (includes the GPU with `?sync`). */
+      perf: { frames: number; workMs: number; simMs: number; agentMs: number };
+      population: () => number;
+    };
   }
 }
 
@@ -56,6 +64,7 @@ function main(): void {
     return;
   }
 
+  const params = new URLSearchParams(window.location.search);
   const start = PRESETS[DEFAULT_PRESET];
   const state: UiState = {
     preset: DEFAULT_PRESET,
@@ -72,8 +81,12 @@ function main(): void {
     initialAgents: DEFAULT_INITIAL_AGENTS,
     view: 3,
     trails: true,
-    damageOnClick: false,
-    damageRadius: 48,
+    bloom: true,
+    bloomStrength: 0.8,
+    flow: false,
+    lineageView: true,
+    brush: 'off',
+    brushRadius: 24,
   };
 
   const field = new GrayScott(gl, FIELD_SIZE);
@@ -85,17 +98,18 @@ function main(): void {
   const pop = new Population(AGENT_CAP);
   const scratch = new AgentScratch(FIELD_SIZE, AGENT_CAP);
   const update = new Float32Array(env.grid * env.grid * 2);
-  const renderer = new FieldRenderer(gl, state.colormap);
-  const agentRenderer = new AgentRenderer(gl, AGENT_CAP);
-  const trails = new Trails(gl);
+  const scene = new Scene(gl, FIELD_SIZE, AGENT_CAP, state.colormap);
   const plots = createPlots(plotsEl);
+  const lineages = createLineageChart(plotsEl);
   const effective: FieldParams = { F: state.F, k: state.k };
   const damageQueue: { x: number; y: number; r: number }[] = [];
+  const brush = { active: false, x: 0, y: 0, lastRipple: 0 };
+  const perf = { frames: 0, workMs: 0, simMs: 0, agentMs: 0 };
+  const sync = params.has('sync');
   let rng: Rng = mulberry32(agentSeed(state.seed));
   let tickAccumulator = 0;
   let queuedTicks = 0;
   let ticks = 0;
-  let frames = 0;
   let runStart = performance.now();
   let hudVisible = true;
 
@@ -104,18 +118,27 @@ function main(): void {
     pop.clear();
     rng = mulberry32(agentSeed(state.seed));
     seedPopulation(pop, state.initialAgents, FIELD_SIZE, rng);
-    trails.clear();
+    coupling.restart();
+    metricsReader.restart();
+    scene.clearTrails();
     log.clear();
+    lineages.clear();
     ticks = 0;
     runStart = performance.now();
   };
   reset();
 
-  /** One tick: SPEC.md section 3, steps 2 to 5. */
+  /**
+   * One tick: SPEC.md section 3, steps 2 to 5. Agents sense the newest
+   * finished readback (normally the previous frame's), so their CPU work
+   * overlaps the GPU's field steps instead of waiting for them.
+   */
   const tick = (): void => {
     field.step(state.stepsPerFrame, effective);
-    env.load(coupling.readBack(), 4, 0);
+    env.load(coupling.readBackAsync(), 4, 0);
+    const agentStart = performance.now();
     stepAgents(pop, env, state.agents, rng, scratch);
+    perf.agentMs += (performance.now() - agentStart - perf.agentMs) * 0.05;
     env.writeUpdate(update);
     coupling.write(update);
     ticks++;
@@ -135,15 +158,14 @@ function main(): void {
     step: () => {
       queuedTicks += 1;
     },
-    colormapChanged: () => renderer.setColormap(state.colormap),
+    colormapChanged: () => scene.setColormap(state.colormap),
     damageQuarter: () => {
       damageQueue.push({ x: FIELD_SIZE / 2, y: FIELD_SIZE / 2, r: Math.sqrt((0.25 * FIELD_SIZE * FIELD_SIZE) / Math.PI) });
     },
     downloadCsv,
   });
 
-  let view: Viewport = { x: 0, y: 0, size: 1 };
-  bindInput(canvas, FIELD_SIZE, () => view, {
+  bindInput(canvas, FIELD_SIZE, () => scene.viewport(canvas.width, canvas.height), {
     toggleUi: () => {
       hudVisible = !hudVisible;
       controls.setVisible(hudVisible);
@@ -158,13 +180,20 @@ function main(): void {
       state.view = v;
       controls.refresh();
     },
-    fieldClick: (x, y) => {
-      if (state.damageOnClick) damageQueue.push({ x, y, r: state.damageRadius });
+    brushAt: (x, y, first) => {
+      if (state.brush === 'off') return;
+      brush.active = true;
+      brush.x = x;
+      brush.y = y;
+      if (first) brush.lastRipple = 0;
+    },
+    brushEnd: () => {
+      brush.active = false;
     },
   });
 
-  if (new URLSearchParams(window.location.search).has('test')) {
-    window.__selforg = { state, log, reset, refresh: () => controls.refresh() };
+  if (params.has('test')) {
+    window.__selforg = { state, log, reset, refresh: () => controls.refresh(), perf, population: () => pop.count };
   }
 
   const resize = (): void => {
@@ -184,6 +213,7 @@ function main(): void {
   let hudTimer = 0;
 
   const frame = (now: number): void => {
+    const workStart = performance.now();
     const dt = Math.min((now - last) / 1000, 0.25);
     last = now;
     if (dt > 0) fps += (1 / dt - fps) * 0.05;
@@ -193,6 +223,14 @@ function main(): void {
     const alpha = 1 - Math.exp(-dt / EASE_TIME_CONSTANT_S);
     effective.F += (targetF - effective.F) * alpha;
     effective.k += (state.k - effective.k) * alpha;
+    if (brush.active && state.brush !== 'off') {
+      if (state.brush === 'damage') damageQueue.push({ x: brush.x, y: brush.y, r: state.brushRadius });
+      else coupling.brush(state.brush, brush.x, brush.y, state.brushRadius, now % 1000);
+      if (now - brush.lastRipple > RIPPLE_EVERY_MS) {
+        scene.ripples.add(brush.x, brush.y, state.brushRadius, now);
+        brush.lastRipple = now;
+      }
+    }
     for (const d of damageQueue.splice(0)) {
       coupling.wipe(d.x, d.y, d.r);
       wipeAgents(pop, d.x, d.y, d.r, FIELD_SIZE);
@@ -208,35 +246,46 @@ function main(): void {
       n = Math.min(Math.floor(tickAccumulator), MAX_TICKS_PER_FRAME);
       tickAccumulator -= Math.floor(tickAccumulator);
     }
+    const simStart = performance.now();
     for (let t = 0; t < n; t++) tick();
+    if (sync) gl.finish();
+    perf.simMs += (performance.now() - simStart - perf.simMs) * 0.05;
 
     // 6. Metrics every 10 frames.
-    frames++;
-    if (frames % METRICS_EVERY === 0) {
-      fillFromRgba(fieldSample, metricsReader.readBack());
+    perf.frames++;
+    if (perf.frames % METRICS_EVERY === 0) {
+      fillFromRgba(fieldSample, metricsReader.readBackAsync());
       log.push(takeSample(ticks, (now - runStart) / 1000, effective, fieldSample, pop));
       if (hudVisible) plots.update(log);
+      if (hudVisible && state.lineageView) lineages.push(topLineages(pop, 8));
     }
+    lineages.setVisible(hudVisible && state.lineageView);
 
     // 7. Render.
-    const side = Math.min(canvas.width, canvas.height);
-    view = { x: Math.floor((canvas.width - side) / 2), y: Math.floor((canvas.height - side) / 2), size: side };
-    const showAgents = state.view !== 1;
-    agentRenderer.upload(pop);
-    if (state.view === 2) renderer.clear(canvas.width, canvas.height);
-    else renderer.draw(field.texture, field.size, state.vMax, canvas.width, canvas.height, view);
-    if (showAgents && state.trails) {
-      trails.update(side, () => agentRenderer.drawDots(FIELD_SIZE, Math.max(1, (1.5 * FIELD_SIZE) / side)));
-      trails.composite(view);
-    }
-    if (showAgents) agentRenderer.drawDiscs(FIELD_SIZE, view, METABOLISM.radius * DISC_DRAW_SCALE);
+    scene.draw({
+      fieldTexture: field.texture,
+      pop,
+      env,
+      canvasW: canvas.width,
+      canvasH: canvas.height,
+      dpr: Math.min(window.devicePixelRatio || 1, 2),
+      now,
+      view: state.view,
+      vMax: state.vMax,
+      trails: state.trails,
+      bloom: state.bloom,
+      bloomStrength: state.bloomStrength,
+      flow: state.flow,
+    });
+    if (sync) gl.finish();
+    perf.workMs += (performance.now() - workStart - perf.workMs) * 0.05;
 
     hudTimer += dt;
     if (hudVisible && hudTimer > 0.25) {
       hudTimer = 0;
       hud.textContent =
         `${fps.toFixed(0)} fps · ${pop.count} protocells · F ${effective.F.toFixed(4)} · k ${effective.k.toFixed(4)}` +
-        ` · ${state.paused ? 'paused' : `${state.stepsPerFrame} steps/tick`}  ·  1/2/3 view · H hides UI`;
+        ` · ${state.paused ? 'paused' : `${state.stepsPerFrame} steps/tick`}  ·  1–4 view · H hides UI`;
     }
     requestAnimationFrame(frame);
   };

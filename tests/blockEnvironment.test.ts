@@ -34,10 +34,10 @@ describe('BlockEnvironment', () => {
     const update = new Float32Array(8);
     env.writeUpdate(update);
     field.applyBlockUpdate(8, update);
-    let u0 = 0;
-    for (let y = 0; y < 8; y++) for (let x = 0; x < 8; x++) u0 += field.u[y * size + x] as number;
-    expect(u0).toBeCloseTo(blockMass - first - second, 3);
-    expect(field.v[9 * size + 9]).toBeCloseTo(0.1);
+    // Interpolation spreads the update over neighbouring blocks; the field total is exact for uniform u.
+    const total = (a: Float32Array): number => a.reduce((s, x) => s + x, 0);
+    expect(total(field.u)).toBeCloseTo(4 * blockMass - first - second, 3);
+    expect(total(field.v)).toBeCloseTo(6.4, 3);
   });
 
   it('starts every tick with clean deltas', () => {

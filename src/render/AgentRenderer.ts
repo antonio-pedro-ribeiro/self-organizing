@@ -67,10 +67,10 @@ export class AgentRenderer {
     this.count = n;
   }
 
-  /** Discs on the screen, alpha-blended over whatever is in the viewport. */
-  drawDiscs(fieldSize: number, view: Viewport, radiusCells: number): void {
+  /** Discs alpha-blended over whatever is in the viewport of `target`. */
+  drawDiscs(target: WebGLFramebuffer | null, fieldSize: number, view: Viewport, radiusCells: number): void {
     const { gl } = this;
-    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, target);
     gl.viewport(view.x, view.y, view.size, view.size);
     gl.enable(gl.BLEND);
     gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);

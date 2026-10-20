@@ -47,18 +47,31 @@ describe('CpuField', () => {
     expect(hotShare(field)).toBeGreaterThan(3 * start);
   });
 
-  it('reads back block means and applies block updates', () => {
+  it('reads back block means', () => {
     const field = new CpuField(16);
     for (let i = 0; i < 256; i++) field.u[i] = (i % 16) < 8 ? 0.5 : 1;
     const means = new Float32Array(4);
     field.blockMeans(8, means);
     expect(Array.from(means)).toEqual([0.5, 1, 0.5, 1]);
-    // Block 0: halve u and add 0.1 to v. Others unchanged.
-    field.applyBlockUpdate(8, Float32Array.from([0.5, 0.1, 1, 0, 1, 0, 1, 0]));
-    expect(field.u[0]).toBeCloseTo(0.25);
-    expect(field.v[0]).toBeCloseTo(0.1);
-    expect(field.u[8]).toBe(1);
-    expect(field.v[8 * 16]).toBe(0);
+  });
+
+  it('applies block updates smoothly, with v mass exact', () => {
+    const field = new CpuField(32);
+    field.u.fill(0.5);
+    const update = new Float32Array(32);
+    for (let b = 0; b < 16; b++) update[b * 2] = 1;
+    update[0] = 0.5; // block 0 loses half its u
+    update[1] = 0.1; // and gains 0.1 v per cell
+    field.applyBlockUpdate(8, update);
+    const sum = (a: Float32Array): number => a.reduce((s, x) => s + x, 0);
+    expect(sum(field.v)).toBeCloseTo(0.1 * 64, 3);
+    expect(sum(field.u)).toBeCloseTo(0.5 * 1024 - 0.25 * 64, 3);
+    // Cells nearest block 0's centre (which falls between cells) get almost all of it; far blocks nothing.
+    expect(field.v[4 * 32 + 4]).toBeCloseTo(0.1 * (15 / 16) ** 2);
+    expect(field.v[20 * 32 + 20]).toBe(0);
+    // No square edge: v falls off across the block boundary.
+    expect(field.v[4 * 32 + 8]).toBeGreaterThan(0);
+    expect(field.v[4 * 32 + 8]).toBeLessThan(0.1);
   });
 
   it('wipes a disc back to the homogeneous state, across the seam', () => {

@@ -93,21 +93,43 @@ export class CpuField {
     for (let b = 0; b < g * g; b++) out[b] = (out[b] as number) * inv;
   }
 
-  /** Apply a per-block update of RG pairs: u *= R, v += G (clamped), as the GPU apply pass does. */
+  /**
+   * Apply a per-block update of RG pairs, interpolated bilinearly between
+   * block centres: u *= R, v += G (clamped), as the GPU apply pass does.
+   */
   applyBlockUpdate(blockSize: number, update: Float32Array): void {
     const s = this.size;
     const g = s / blockSize;
     const { u, v } = this;
     for (let y = 0; y < s; y++) {
-      const brow = Math.floor(y / blockSize) * g;
-      let i = y * s;
-      for (let bx = 0; bx < g; bx++) {
-        const factor = update[(brow + bx) * 2] as number;
-        const add = update[(brow + bx) * 2 + 1] as number;
-        for (let k = 0; k < blockSize; k++, i++) {
-          u[i] = clamp01((u[i] as number) * factor);
-          v[i] = clamp01((v[i] as number) + add);
-        }
+      const fy = (y + 0.5) / blockSize - 0.5;
+      const by = Math.floor(fy);
+      const ty = fy - by;
+      const r0 = ((by + g) % g) * g;
+      const r1 = ((by + 1) % g) * g;
+      for (let x = 0; x < s; x++) {
+        const fx = (x + 0.5) / blockSize - 0.5;
+        const bx = Math.floor(fx);
+        const tx = fx - bx;
+        const c0 = (bx + g) % g;
+        const c1 = (bx + 1) % g;
+        const w00 = (1 - tx) * (1 - ty);
+        const w10 = tx * (1 - ty);
+        const w01 = (1 - tx) * ty;
+        const w11 = tx * ty;
+        const i00 = (r0 + c0) * 2;
+        const i10 = (r0 + c1) * 2;
+        const i01 = (r1 + c0) * 2;
+        const i11 = (r1 + c1) * 2;
+        const factor =
+          w00 * (update[i00] as number) + w10 * (update[i10] as number) +
+          w01 * (update[i01] as number) + w11 * (update[i11] as number);
+        const add =
+          w00 * (update[i00 + 1] as number) + w10 * (update[i10 + 1] as number) +
+          w01 * (update[i01 + 1] as number) + w11 * (update[i11 + 1] as number);
+        const i = y * s + x;
+        u[i] = clamp01((u[i] as number) * factor);
+        v[i] = clamp01((v[i] as number) + add);
       }
     }
   }
