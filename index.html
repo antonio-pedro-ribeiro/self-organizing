@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Self-organizing field</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        background: #05060a;
+        overflow: hidden;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      }
+      canvas {
+        display: block;
+        width: 100vw;
+        height: 100vh;
+      }
+      #hud {
+        position: fixed;
+        left: 12px;
+        bottom: 10px;
+        color: rgba(255, 255, 255, 0.55);
+        font-size: 12px;
+        pointer-events: none;
+        user-select: none;
+      }
+      #error {
+        display: none;
+        position: fixed;
+        inset: 0;
+        padding: 24px;
+        color: #ffb4a8;
+        background: #05060a;
+        font-size: 15px;
+        white-space: pre-wrap;
+      }
+    </style>
+  </head>
+  <body>
+    <canvas id="view"></canvas>
+    <div id="hud"></div>
+    <div id="error"></div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

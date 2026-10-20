@@ -1,0 +1,75 @@
+import { Pane } from 'tweakpane';
+import { COLORMAP_NAMES, type ColormapName } from '../render/colormap';
+import { PRESETS, PRESET_NAMES, RANGES, type PresetName } from '../field/presets';
+
+/** Everything the UI can change. main.ts owns one instance and reads it every frame. */
+export interface UiState {
+  preset: PresetName;
+  /** Target feed rate; the simulation eases toward it. */
+  F: number;
+  /** Target kill rate; the simulation eases toward it. */
+  k: number;
+  cutFlux: boolean;
+  stepsPerFrame: number;
+  speed: number;
+  vMax: number;
+  colormap: ColormapName;
+  seed: number;
+  paused: boolean;
+}
+
+export interface UiActions {
+  reset: () => void;
+  step: () => void;
+  colormapChanged: () => void;
+}
+
+export interface Controls {
+  refresh: () => void;
+  setVisible: (visible: boolean) => void;
+}
+
+function toOptions<T extends string>(names: readonly T[]): Record<string, T> {
+  const out: Record<string, T> = {};
+  for (const n of names) out[n.charAt(0).toUpperCase() + n.slice(1)] = n;
+  return out;
+}
+
+export function createControls(state: UiState, actions: UiActions): Controls {
+  const pane = new Pane({ title: 'Self-organizing field' });
+
+  const chem = pane.addFolder({ title: 'Chemistry' });
+  chem
+    .addBinding(state, 'preset', { options: toOptions(PRESET_NAMES), label: 'preset' })
+    .on('change', (ev) => {
+      const p = PRESETS[ev.value];
+      state.F = p.F;
+      state.k = p.k;
+      state.cutFlux = false;
+      pane.refresh();
+    });
+  chem.addBinding(state, 'F', { min: RANGES.F.min, max: RANGES.F.max, step: 0.0001, label: 'F (feed)' });
+  chem.addBinding(state, 'k', { min: RANGES.k.min, max: RANGES.k.max, step: 0.0001, label: 'k (kill)' });
+  chem.addBinding(state, 'cutFlux', { label: 'cut flux' });
+
+  const run = pane.addFolder({ title: 'Run' });
+  run.addBinding(state, 'paused', { label: 'paused' });
+  run.addButton({ title: 'Step one frame' }).on('click', actions.step);
+  run.addBinding(state, 'stepsPerFrame', { min: 1, max: 16, step: 1, label: 'steps/frame' });
+  run.addBinding(state, 'speed', { min: 0.25, max: 4, step: 0.25, label: 'speed' });
+  run.addBinding(state, 'seed', { min: 0, max: 99999, step: 1, label: 'seed' });
+  run.addButton({ title: 'Reset with seed' }).on('click', actions.reset);
+
+  const look = pane.addFolder({ title: 'Look' });
+  look
+    .addBinding(state, 'colormap', { options: toOptions(COLORMAP_NAMES), label: 'colormap' })
+    .on('change', actions.colormapChanged);
+  look.addBinding(state, 'vMax', { min: 0.1, max: 0.6, step: 0.01, label: 'v scale' });
+
+  return {
+    refresh: () => pane.refresh(),
+    setVisible: (visible) => {
+      pane.element.style.display = visible ? '' : 'none';
+    },
+  };
+}

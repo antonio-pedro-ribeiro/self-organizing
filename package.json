@@ -1,0 +1,23 @@
+{
+  "name": "self-organizing",
+  "private": true,
+  "version": "0.1.0",
+  "description": "A self-organizing system simulator: GPU reaction-diffusion field with protocell agents",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@tweakpane/core": "^2.0.5",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.4",
+    "vitest": "^5.0.5"
+  },
+  "dependencies": {
+    "tweakpane": "^4.0.5"
+  }
+}
