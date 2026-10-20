@@ -6,17 +6,17 @@ export interface Vec2 {
 
 /**
  * What a protocell can sense and change in its surroundings. Positions are
- * in field cells on a torus of side `size`. The CPU reference field
- * implements this for headless runs; the GPU readback will implement it in M3.
+ * in field cells on a torus of side `size`. Amounts exchanged are masses:
+ * concentration summed over field cells.
  */
 export interface Environment {
   readonly size: number;
-  /** Nutrient u at a position. */
+  /** Nutrient u (concentration) at a position. */
   nutrient(x: number, y: number): number;
-  /** Gradient of u at a position, written into `out`. */
+  /** Gradient of u per field cell at a position, written into `out`. */
   nutrientGradient(x: number, y: number, out: Vec2): void;
-  /** Remove up to `amount` of u at a position; returns what was taken. */
+  /** Remove up to `amount` of u mass near a position; returns what was taken. */
   consume(x: number, y: number, amount: number): number;
-  /** Add `amount` of v at a position. */
+  /** Add `amount` of v mass near a position. */
   emit(x: number, y: number, amount: number): void;
 }

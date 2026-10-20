@@ -1,5 +1,6 @@
 import { Pane } from 'tweakpane';
 import { COLORMAP_NAMES, type ColormapName } from '../render/colormap';
+import type { AgentParams } from '../agents/params';
 import { PRESETS, PRESET_NAMES, RANGES, type PresetName } from '../field/presets';
 
 /** Everything the UI can change. main.ts owns one instance and reads it every frame. */
@@ -16,7 +17,16 @@ export interface UiState {
   colormap: ColormapName;
   seed: number;
   paused: boolean;
+  /** Protocell rules read these every tick. */
+  agents: AgentParams;
+  /** Population seeded on reset. */
+  initialAgents: number;
+  /** 1 field only, 2 agents only, 3 both (SPEC.md section 5). */
+  view: ViewMode;
+  trails: boolean;
 }
+
+export type ViewMode = 1 | 2 | 3;
 
 export interface UiActions {
   reset: () => void;
@@ -54,13 +64,22 @@ export function createControls(state: UiState, actions: UiActions): Controls {
 
   const run = pane.addFolder({ title: 'Run' });
   run.addBinding(state, 'paused', { label: 'paused' });
-  run.addButton({ title: 'Step one frame' }).on('click', actions.step);
-  run.addBinding(state, 'stepsPerFrame', { min: 1, max: 16, step: 1, label: 'steps/frame' });
+  run.addButton({ title: 'Step one tick' }).on('click', actions.step);
+  run.addBinding(state, 'stepsPerFrame', { min: 1, max: 16, step: 1, label: 'field steps/tick' });
   run.addBinding(state, 'speed', { min: 0.25, max: 4, step: 0.25, label: 'speed' });
   run.addBinding(state, 'seed', { min: 0, max: 99999, step: 1, label: 'seed' });
   run.addButton({ title: 'Reset with seed' }).on('click', actions.reset);
 
+  const life = pane.addFolder({ title: 'Protocells' });
+  life.addBinding(state.agents, 'membraneDecay', { min: 0, max: 0.05, step: 0.001, label: 'membrane decay' });
+  life.addBinding(state.agents, 'mutationSigma', { min: 0, max: 0.1, step: 0.001, label: 'mutation sigma' });
+  life.addBinding(state.agents, 'sensingNoise', { min: 0, max: 1, step: 0.01, label: 'sensing noise' });
+  life.addBinding(state.agents, 'productionCut', { label: 'cut production' });
+  life.addBinding(state, 'initialAgents', { min: 0, max: 2000, step: 10, label: 'initial (on reset)' });
+
   const look = pane.addFolder({ title: 'Look' });
+  look.addBinding(state, 'view', { options: { 'Field only (1)': 1, 'Agents only (2)': 2, 'Both (3)': 3 }, label: 'view' });
+  look.addBinding(state, 'trails', { label: 'trails' });
   look
     .addBinding(state, 'colormap', { options: toOptions(COLORMAP_NAMES), label: 'colormap' })
     .on('change', actions.colormapChanged);

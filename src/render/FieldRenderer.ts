@@ -45,13 +45,19 @@ export class FieldRenderer {
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, 256, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, buildLut(name, 256));
   }
 
-  /** Clear the canvas and draw the field into a square viewport. */
-  draw(state: WebGLTexture, fieldSize: number, vMax: number, canvasW: number, canvasH: number, view: Viewport): void {
+  /** Clear the whole canvas to the background colour. */
+  clear(canvasW: number, canvasH: number): void {
     const { gl } = this;
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     gl.viewport(0, 0, canvasW, canvasH);
     gl.clearColor(0.02, 0.024, 0.04, 1);
     gl.clear(gl.COLOR_BUFFER_BIT);
+  }
+
+  /** Clear the canvas and draw the field into a square viewport. */
+  draw(state: WebGLTexture, fieldSize: number, vMax: number, canvasW: number, canvasH: number, view: Viewport): void {
+    const { gl } = this;
+    this.clear(canvasW, canvasH);
     gl.viewport(view.x, view.y, view.size, view.size);
     gl.useProgram(this.program);
     gl.bindVertexArray(this.vao);

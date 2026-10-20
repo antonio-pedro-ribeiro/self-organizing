@@ -84,3 +84,38 @@ void main() {
   outColor = vec4(col, 1.0);
 }
 `;
+
+/** Block means for the agent readback: one output texel per uBlock² field texels. */
+export const DOWNSAMPLE_FRAG = `#version 300 es
+precision highp float;
+uniform sampler2D uState;
+uniform int uBlock;
+out vec4 outMean;
+
+void main() {
+  ivec2 origin = ivec2(gl_FragCoord.xy) * uBlock;
+  vec2 sum = vec2(0.0);
+  for (int y = 0; y < uBlock; y++) {
+    for (int x = 0; x < uBlock; x++) {
+      sum += texelFetch(uState, origin + ivec2(x, y), 0).rg;
+    }
+  }
+  outMean = vec4(sum / float(uBlock * uBlock), 0.0, 1.0);
+}
+`;
+
+/** Agent write-back: per block, u is scaled by R and G is added to v. */
+export const APPLY_FRAG = `#version 300 es
+precision highp float;
+uniform sampler2D uState;
+uniform sampler2D uUpdate;
+uniform int uBlock;
+out vec4 outState;
+
+void main() {
+  ivec2 p = ivec2(gl_FragCoord.xy);
+  vec2 c = texelFetch(uState, p, 0).rg;
+  vec2 d = texelFetch(uUpdate, p / uBlock, 0).rg;
+  outState = vec4(clamp(c.x * d.x, 0.0, 1.0), clamp(c.y + d.y, 0.0, 1.0), 0.0, 1.0);
+}
+`;

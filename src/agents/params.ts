@@ -29,14 +29,17 @@ export const DEFAULT_INITIAL_AGENTS = 200;
 export const AGENT_CAP = 5000;
 
 /**
- * Fixed metabolic constants. Starting values, not tuned against any test;
- * see PROGRESS.md.
+ * Fixed metabolic constants. Amounts of u and v are masses (concentration
+ * summed over field cells; an 8×8 block at u = 1 holds 64). Starting values,
+ * not tuned against any test; see PROGRESS.md.
  */
 export const METABOLISM = {
-  /** Share of local u taken per tick. */
-  feedRate: 0.05,
-  /** Energy gained per unit of u taken. */
-  energyYield: 1,
+  /** u mass an agent tries to graze per tick, per unit of local u. */
+  grazeRate: 20,
+  /** Most of a block's u that its agents can take in one tick. */
+  maxGrazeShare: 0.5,
+  /** Energy gained per unit of u mass grazed. */
+  energyYield: 0.002,
   /** Share of E turned into components per tick at build efficiency 1. */
   productionRate: 0.08,
   /** Components spent on repair per tick, per unit of missing membrane. */
@@ -51,12 +54,12 @@ export const METABOLISM = {
   maxSpeed: 0.6,
   /** Fraction of the heading error corrected per tick at sensing gain 1. */
   turnRate: 0.5,
-  /** Gradient magnitude at which steering is about 76% of full strength. */
+  /** Gradient magnitude (u per cell) at which steering is about 76% of full strength. */
   gradientScale: 0.01,
-  /** v emitted per tick as a signal. */
-  signalRate: 0.002,
-  /** v released when an agent dies. */
-  deathBurst: 0.05,
+  /** v mass emitted per tick as a signal. */
+  signalRate: 0.1,
+  /** v mass released when an agent dies: 0.25 across one 8×8 block, enough to seed a spot. */
+  deathBurst: 16,
   /** Agent radius in cells; overlapping agents push apart. */
   radius: 1.5,
   /** Starting energy, components and membrane of a seeded agent. */

@@ -73,6 +73,22 @@ export class GrayScott {
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
   }
 
+  /**
+   * Run one extra pass over the field: the current state is bound to texture
+   * unit 0, `draw` issues the draw call, and its output becomes the new state.
+   */
+  pass(draw: () => void): void {
+    const { gl, size } = this;
+    const next = 1 - this.current;
+    gl.bindFramebuffer(gl.FRAMEBUFFER, this.fbos[next] as WebGLFramebuffer);
+    gl.viewport(0, 0, size, size);
+    gl.activeTexture(gl.TEXTURE0);
+    gl.bindTexture(gl.TEXTURE_2D, this.textures[this.current] as WebGLTexture);
+    draw();
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    this.current = next;
+  }
+
   private createTexture(): WebGLTexture {
     const { gl, size } = this;
     const tex = gl.createTexture();

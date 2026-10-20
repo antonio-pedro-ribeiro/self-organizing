@@ -1,34 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import type { Environment, Vec2 } from '../src/agents/environment';
+import type { Environment } from '../src/agents/environment';
 import { AGENT_CAP, DEFAULT_AGENT_PARAMS, METABOLISM, type AgentParams } from '../src/agents/params';
 import { Population, type AgentInit } from '../src/agents/Population';
 import { AgentScratch, mutate, stepAgents } from '../src/agents/rules';
 import { mulberry32 } from '../src/util/prng';
-
-/** Uniform nutrient with a fixed gradient; records everything exchanged. */
-class StubEnv implements Environment {
-  readonly size = 64;
-  consumed = 0;
-  emitted = 0;
-  constructor(
-    private readonly u: number,
-    private readonly gradient: Vec2 = { x: 0, y: 0 },
-  ) {}
-  nutrient(): number {
-    return this.u;
-  }
-  nutrientGradient(_x: number, _y: number, out: Vec2): void {
-    out.x = this.gradient.x;
-    out.y = this.gradient.y;
-  }
-  consume(_x: number, _y: number, amount: number): number {
-    this.consumed += amount;
-    return amount;
-  }
-  emit(_x: number, _y: number, amount: number): void {
-    this.emitted += amount;
-  }
-}
+import { StubEnv } from './helpers/StubEnv';
 
 const quiet: AgentParams = { ...DEFAULT_AGENT_PARAMS, sensingNoise: 0, mutationSigma: 0 };
 
@@ -48,13 +24,13 @@ function run(pop: Population, env: Environment, params: AgentParams, ticks: numb
 }
 
 describe('protocell rules', () => {
-  it('turns consumed nutrient into energy one for one', () => {
+  it('grazes in proportion to local nutrient and gains energy at the yield', () => {
     const pop = one({ build: 0, motility: 0 });
     const env = new StubEnv(0.8);
     run(pop, env, quiet, 1);
-    expect(env.consumed).toBeCloseTo(METABOLISM.feedRate * 0.8);
+    expect(env.consumed).toBeCloseTo(METABOLISM.grazeRate * 0.8);
     const leak = METABOLISM.leakRate * (1 - (pop.membrane[0] as number));
-    const expected = (0.5 + env.consumed) * (1 - leak) - METABOLISM.basalCost;
+    const expected = (0.5 + METABOLISM.energyYield * env.consumed) * (1 - leak) - METABOLISM.basalCost;
     expect(pop.energy[0]).toBeCloseTo(expected, 5);
   });
 

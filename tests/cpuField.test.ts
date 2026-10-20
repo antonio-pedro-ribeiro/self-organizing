@@ -47,24 +47,27 @@ describe('CpuField', () => {
     expect(hotShare(field)).toBeGreaterThan(3 * start);
   });
 
-  it('consumes no more than is there and wraps coordinates', () => {
-    const field = new CpuField(8);
-    field.u[0] = 0.3;
-    expect(field.consume(8.5, 16.2, 1)).toBeCloseTo(0.3);
-    expect(field.u[0]).toBe(0);
-    expect(field.consume(-0.5, 0, 0.25)).toBeCloseTo(0.25);
-    expect(field.u[7]).toBeCloseTo(0.75);
-    field.emit(3, 3, 0.4);
-    field.emit(3, 3, 0.9);
-    expect(field.v[3 * 8 + 3]).toBe(1);
+  it('reads back block means and applies block updates', () => {
+    const field = new CpuField(16);
+    for (let i = 0; i < 256; i++) field.u[i] = (i % 16) < 8 ? 0.5 : 1;
+    const means = new Float32Array(4);
+    field.blockMeans(8, means);
+    expect(Array.from(means)).toEqual([0.5, 1, 0.5, 1]);
+    // Block 0: halve u and add 0.1 to v. Others unchanged.
+    field.applyBlockUpdate(8, Float32Array.from([0.5, 0.1, 1, 0, 1, 0, 1, 0]));
+    expect(field.u[0]).toBeCloseTo(0.25);
+    expect(field.v[0]).toBeCloseTo(0.1);
+    expect(field.u[8]).toBe(1);
+    expect(field.v[8 * 16]).toBe(0);
   });
 
-  it('reports the nutrient gradient by central differences', () => {
-    const field = new CpuField(8);
-    for (let x = 0; x < 8; x++) for (let y = 0; y < 8; y++) field.u[y * 8 + x] = x / 10;
-    const g = { x: 0, y: 0 };
-    field.nutrientGradient(3, 3, g);
-    expect(g.x).toBeCloseTo(0.1);
-    expect(g.y).toBeCloseTo(0);
+  it('wipes a disc back to the homogeneous state, across the seam', () => {
+    const field = new CpuField(32);
+    field.u.fill(0.3);
+    field.v.fill(0.2);
+    field.wipe(0, 0, 4);
+    expect(field.u[0]).toBe(1);
+    expect(field.v[31 * 32 + 31]).toBe(0);
+    expect(field.u[16 * 32 + 16]).toBeCloseTo(0.3);
   });
 });

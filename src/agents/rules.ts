@@ -47,7 +47,7 @@ export function stepAgents(
     let m = pop.membrane[i] as number;
 
     // 1. Feed: what the agent gains, the field loses.
-    e += K.energyYield * env.consume(x, y, K.feedRate * env.nutrient(x, y));
+    e += K.energyYield * env.consume(x, y, K.grazeRate * env.nutrient(x, y));
 
     // 2. Produce: energy becomes components.
     const build = params.productionCut ? 0 : (pop.build[i] as number);

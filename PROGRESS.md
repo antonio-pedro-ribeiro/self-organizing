@@ -11,11 +11,11 @@ Built: Vite and strict TypeScript scaffold, GPU Gray–Scott (RGBA32F ping-pong,
 ## M2 Agents (headless): gate passed
 
 Built:
-- `src/field/CpuField.ts`: CPU reference Gray–Scott, the same math as the shader. It implements the agents' `Environment` interface (nutrient, gradient, consume, emit).
+- `src/field/CpuField.ts`: CPU reference Gray–Scott, the same math as the shader. (In M3 its per-cell sensing was replaced by the block coupling.)
 - `src/agents/`: `Population` (structure of typed arrays, stable compaction, FNV-1a state hash), `SpatialHash` (counting-sort grid on a torus), `rules.ts` (feed, produce, repair, retain, move, signal, divide or die, then membrane separation), `seed.ts`, `params.ts`, and `World` (headless field plus agents).
 - `gaussian()` in `src/util/prng.ts`.
 
-Gate results (`npm test`, 34 tests):
+Gate results at the time (`npm test`, 34 tests; M3 changed the numbers, see below):
 - **Test 4, knockout:** with production cut, the last agent died at tick 118 (limit 200).
 - **Test 4, control:** 5000 agents alive at tick 1000, from 200 at the start (needs at least 100).
 - **Test 7:** two 1000-tick runs gave the identical hash `f00b851a`, and a different seed gives a different hash.
@@ -30,11 +30,47 @@ Gate results (`npm test`, 34 tests):
 - **Spatial hash use:** the hash is used for membrane separation, so overlapping discs push apart. This is local physics, not a group rule.
 - **Metabolic constants** (`METABOLISM` in `src/agents/params.ts`) are first guesses. They were not tuned against any test.
 
-### Open issue: no carrying capacity
+## M3 Coupling: gate NOT passed (test 5 fails)
 
-In the control run the population hits the 5000 hard cap by about tick 200 and stays there. The field's feed refills nutrient far faster than agents can eat it, so food never limits growth; only the safety cap does. The cap is meant as a safety limit, not as the ecology. This would make test 6 (recovery to 80% of the pre-damage population) and the population plot uninformative. Options for M3, where consumption is coupled to the GPU field anyway: make agents much hungrier relative to the feed flux (graze an area, lower energy yield), raise maintenance costs, or add local crowding costs. This needs a decision before M3.
+### Carrying capacity (user chose option 1: hungrier agents)
+
+- **Grazing per block:** agents graze from their 8×8 block of field cells and sense u by bilinear interpolation of block means. In the browser this is the 64×64 readback of a 512² field; headless, the CPU field uses the same `BlockEnvironment`, so both run the same coupling.
+- **Write-back conserves mass:** per block, u is multiplied by a factor so the block loses exactly the u mass grazed, and emitted v is spread evenly over the block.
+- **Mass units:** amounts are now masses (concentration × cells). New constants: graze rate 20 per unit of local u, energy yield 0.002 per unit grazed, at most 50% of a block's u per tick. Signal is 0.1 v mass per tick. Death releases 16 v mass, which is 0.25 across one block: enough to seed a Gray–Scott spot.
+- **What limits growth:** mostly local depletion. A grazing agent drains its own block faster than the feed refills it, so it must keep moving.
+- **How the constants were chosen:** against design targets, not test thresholds. The targets were a carrying capacity below the 5000 cap that F controls, and no frozen state.
+  - Graze 20 / yield 0.0015: population frozen at exactly 50; agents break even and never divide or die.
+  - Graze 40 / yield 0.001: also frozen; agents strip their own block.
+  - Graze 20 / yield 0.002: chosen.
+- **Results at 128²:** the population settles around 250–420, and lower F gives fewer agents. **Results at 512²** (default 200 agents, Mitosis): 313 at tick 250, 2975 at 1000, then levelling off at 3899 by tick 3000, below the 5000 cap and still creeping up slowly. Mean u fell from 0.90 to 0.45, and spot coverage fell to 0% by tick 1250. The CPU reference takes about 130 ms per tick at 512².
+
+**Trade-off to decide (not fixed):** agents and the Gray–Scott pattern compete for the same u. As the population evolves lower build efficiency (mean build falls from 0.5 to about 0.3), agents break even at lower u, graze mean u down to about 0.45, and the Mitosis spots die out (coverage 0% instead of about 34%). Setting the yield low enough to keep the pattern alive froze the population instead. Options: a cost floor that evolution can't lower (higher basal cost), a cap on how much a single agent can store, or accepting that a crowded ecology erases the pattern.
+
+### Browser coupling and render
+
+- `src/field/FieldCoupling.ts`: downsample pass (8×8 block means into a 64×64 RGBA32F target, read with `readPixels`) and apply pass (64×64 RG32F update texture). `GrayScott.pass()` runs an extra ping-pong pass.
+- Frame loop (`src/main.ts`): one tick is the field steps, readback, agent step and write-back (SPEC.md section 3, steps 2 to 5). The speed slider now sets ticks per frame (at most 4), so field and agent rates stay locked. "Single step" steps one tick.
+- `src/render/AgentRenderer.ts`: instanced discs, with ring opacity = M and core brightness = E. Hue is the hue of the genome (gain, motility, build) read as an RGB colour. "Hue = lineage derived from genome" was read this way, so drift shows as a colour shift. Discs are drawn at twice the physical radius so they read on screen.
+- `src/render/Trails.ts`: RGBA16F feedback buffer with decay 0.92. Half floats are used because 8-bit trails never fade below 1/255.
+- Controls: a Protocells folder (membrane decay, mutation sigma, sensing noise, cut production, initial agents applied on reset), view mode, and a trails toggle. Keys `1`, `2`, `3` switch view mode. View 4 (network overlay) is M5.
+- The browser path has not been run yet: no browser here. It needs the same kind of check as M1.
+
+### Gate results (`npm test`, 39 tests, 38 pass)
+
+- **Test 5, FAILS:** CV of the energy response is **0.059** (needs above 0.1). Protocol: 50 genomes from the seeding distribution, each alone in a uniform environment with no noise and no division. 20 ticks at u = 0.5, then 10 ticks at u = 1. Response = final E minus final E of the same agent without the pulse. Mean response 0.158. The threshold was not changed. Cause: intake depends only on u, not on any gene, so all genomes take in the same extra energy. The genome only changes how much is spent on production (build) and movement (motility). For the test to pass honestly, a gene would have to shape the response itself, for example sensing gain scaling uptake. That is a model change and needs a decision.
+- **Test 6, passes:** pre-damage mean 254.4 agents (last 200 of 2000 ticks). Wiping 25% of the area removed 66 agents; the lowest point was 191. The 100-tick moving mean reached 80% of the pre-damage level at tick 133 (2.2 s; limit 60 s). The criterion is weak: a 25% wipe leaves 75%, so recovery to 80% needs only a small rebound. No rule refers to damage or recolonization; recovery comes from ordinary division into the emptied area.
+- **Tests 4 and 7, still pass with the new coupling:** knockout extinct at tick 121; control 125 agents at tick 1000 from 50; determinism hash `b6ffadc7` on both runs.
+
+### Assumptions and deviations (M3)
+
+- **Headless test population:** 50 initial agents on 128², because 200 on 128² would be 16× the default density of 200 on 512².
+- **60 s = 3600 ticks** (one tick per frame at 60 fps).
+- **Test 6 judging:** pre-damage level is the mean over the 200 ticks before damage; recovery is judged on a 100-tick moving mean.
+- **Damage:** "wipe" resets the field to u = 1, v = 0 and removes the agents in the disc with no death burst. Core functions `World.damage`, `CpuField.wipe` and `wipeAgents` exist; the browser tool is M4.
 
 ## Next
 
-1. Decide on carrying capacity (above).
-2. M3: field readback for sensing, consumption and signal write-back, instanced agent render, trails; tests 5 and 6.
+1. Decide how to address test 5: a model change (a gene that shapes uptake) or a different reading of the test.
+2. Decide the agent–pattern trade-off above.
+3. Run the browser check for M3: agents visible, trails, view modes, frame rate.
+4. M4 after the gate passes.

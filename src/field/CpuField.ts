@@ -1,12 +1,13 @@
-import type { Environment, Vec2 } from '../agents/environment';
+import { torusDistance } from '../util/torus';
 import { initialFieldData } from './initial';
 import { DT, DU, DV, LAPLACIAN, type FieldParams } from './presets';
 
 /**
  * CPU reference Gray-Scott on a torus, with the same 9-point Laplacian,
- * explicit Euler step and clamping as the GPU shader. Used for headless runs.
+ * explicit Euler step and clamping as the GPU shader, plus the same block
+ * readback and update the GPU path uses. Used for headless runs.
  */
-export class CpuField implements Environment {
+export class CpuField {
   readonly size: number;
   u: Float32Array;
   v: Float32Array;
@@ -72,43 +73,56 @@ export class CpuField implements Environment {
     }
   }
 
-  nutrient(x: number, y: number): number {
-    return this.u[this.index(x, y)] as number;
-  }
-
-  nutrientGradient(x: number, y: number, out: Vec2): void {
+  /** Mean u per block of `blockSize`² cells, row-major, like the GPU readback. */
+  blockMeans(blockSize: number, out: Float32Array): void {
     const s = this.size;
-    const cx = wrapCell(x, s);
-    const cy = wrapCell(y, s);
+    const g = s / blockSize;
     const u = this.u;
-    const l = cx === 0 ? s - 1 : cx - 1;
-    const r = cx === s - 1 ? 0 : cx + 1;
-    const up = cy === 0 ? s - 1 : cy - 1;
-    const dn = cy === s - 1 ? 0 : cy + 1;
-    out.x = 0.5 * ((u[cy * s + r] as number) - (u[cy * s + l] as number));
-    out.y = 0.5 * ((u[dn * s + cx] as number) - (u[up * s + cx] as number));
+    out.fill(0, 0, g * g);
+    for (let y = 0; y < s; y++) {
+      const brow = Math.floor(y / blockSize) * g;
+      let i = y * s;
+      for (let bx = 0; bx < g; bx++) {
+        let sum = 0;
+        for (let k = 0; k < blockSize; k++) sum += u[i++] as number;
+        out[brow + bx] = (out[brow + bx] as number) + sum;
+      }
+    }
+    const inv = 1 / (blockSize * blockSize);
+    for (let b = 0; b < g * g; b++) out[b] = (out[b] as number) * inv;
   }
 
-  consume(x: number, y: number, amount: number): number {
-    const i = this.index(x, y);
-    const taken = Math.min(Math.max(amount, 0), this.u[i] as number);
-    this.u[i] = (this.u[i] as number) - taken;
-    return taken;
+  /** Apply a per-block update of RG pairs: u *= R, v += G (clamped), as the GPU apply pass does. */
+  applyBlockUpdate(blockSize: number, update: Float32Array): void {
+    const s = this.size;
+    const g = s / blockSize;
+    const { u, v } = this;
+    for (let y = 0; y < s; y++) {
+      const brow = Math.floor(y / blockSize) * g;
+      let i = y * s;
+      for (let bx = 0; bx < g; bx++) {
+        const factor = update[(brow + bx) * 2] as number;
+        const add = update[(brow + bx) * 2 + 1] as number;
+        for (let k = 0; k < blockSize; k++, i++) {
+          u[i] = clamp01((u[i] as number) * factor);
+          v[i] = clamp01((v[i] as number) + add);
+        }
+      }
+    }
   }
 
-  emit(x: number, y: number, amount: number): void {
-    const i = this.index(x, y);
-    this.v[i] = clamp01((this.v[i] as number) + amount);
+  /** Reset a disc to the homogeneous state (u = 1, v = 0), wrapping on the torus. */
+  wipe(cx: number, cy: number, radius: number): void {
+    const s = this.size;
+    for (let y = 0; y < s; y++) {
+      for (let x = 0; x < s; x++) {
+        if (torusDistance(x + 0.5, y + 0.5, cx, cy, s) < radius) {
+          this.u[y * s + x] = 1;
+          this.v[y * s + x] = 0;
+        }
+      }
+    }
   }
-
-  private index(x: number, y: number): number {
-    return wrapCell(y, this.size) * this.size + wrapCell(x, this.size);
-  }
-}
-
-function wrapCell(p: number, size: number): number {
-  const c = Math.floor(p) % size;
-  return c < 0 ? c + size : c;
 }
 
 function clamp01(x: number): number {
