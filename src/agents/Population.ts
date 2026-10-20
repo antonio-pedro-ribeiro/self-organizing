@@ -10,7 +10,13 @@ export interface AgentInit {
   gain: number;
   motility: number;
   build: number;
+  /** Rolling repair and decay rates (see `ROLLING_WINDOW`); daughters inherit them. */
+  repairAvg?: number;
+  decayAvg?: number;
 }
+
+/** Ticks covered by the rolling repair and decay averages (closure index, SPEC.md section 6). */
+export const ROLLING_WINDOW = 50;
 
 /**
  * Protocells stored as a structure of typed arrays. Entries 0..count-1 are
@@ -35,6 +41,9 @@ export class Population {
   readonly age: Uint32Array;
   readonly lineage: Uint32Array;
   readonly alive: Uint8Array;
+  /** Exponential moving averages of membrane repair and decay per tick. */
+  readonly repairAvg: Float32Array;
+  readonly decayAvg: Float32Array;
 
   constructor(capacity: number) {
     this.capacity = capacity;
@@ -50,6 +59,8 @@ export class Population {
     this.age = new Uint32Array(capacity);
     this.lineage = new Uint32Array(capacity);
     this.alive = new Uint8Array(capacity);
+    this.repairAvg = new Float32Array(capacity);
+    this.decayAvg = new Float32Array(capacity);
   }
 
   /** Append an agent; returns its index, or -1 when at capacity. */
@@ -68,6 +79,8 @@ export class Population {
     this.age[i] = 0;
     this.lineage[i] = a.lineage;
     this.alive[i] = 1;
+    this.repairAvg[i] = a.repairAvg ?? 0;
+    this.decayAvg[i] = a.decayAvg ?? 0;
     return i;
   }
 
@@ -92,7 +105,7 @@ export class Population {
     const n = this.count;
     const arrays = [
       this.x, this.y, this.heading, this.energy, this.components, this.membrane,
-      this.gain, this.motility, this.build, this.age, this.lineage,
+      this.gain, this.motility, this.build, this.age, this.lineage, this.repairAvg, this.decayAvg,
     ];
     h = fnvWord(h, n);
     for (const arr of arrays) {
@@ -118,6 +131,8 @@ export class Population {
     this.age[to] = this.age[from] as number;
     this.lineage[to] = this.lineage[from] as number;
     this.alive[to] = 1;
+    this.repairAvg[to] = this.repairAvg[from] as number;
+    this.decayAvg[to] = this.decayAvg[from] as number;
   }
 }
 

@@ -1,7 +1,7 @@
 import { gaussian, type Rng } from '../util/prng';
 import type { Environment, Vec2 } from './environment';
 import { AGENT_CAP, METABOLISM as K, type AgentParams } from './params';
-import type { Population } from './Population';
+import { ROLLING_WINDOW, type Population } from './Population';
 import { SpatialHash } from './SpatialHash';
 
 const TAU = Math.PI * 2;
@@ -63,6 +63,10 @@ export function stepAgents(
     c -= repair;
     const decay = params.membraneDecay * (1 + (pop.age[i] as number) / K.agingTime);
     m = Math.min(1, m + repair) - decay;
+    const ra = pop.repairAvg[i] as number;
+    const da = pop.decayAvg[i] as number;
+    pop.repairAvg[i] = ra + (repair - ra) / ROLLING_WINDOW;
+    pop.decayAvg[i] = da + (decay - da) / ROLLING_WINDOW;
 
     if (m <= 0) {
       // Die: the membrane is gone and the contents spill into the field.
@@ -108,6 +112,8 @@ export function stepAgents(
         gain: mutate(pop.gain[i] as number, params.mutationSigma, rng),
         motility: mutate(pop.motility[i] as number, params.mutationSigma, rng),
         build: mutate(pop.build[i] as number, params.mutationSigma, rng),
+        repairAvg: pop.repairAvg[i] as number,
+        decayAvg: pop.decayAvg[i] as number,
       });
       x = wrap(x - ox, size);
       y = wrap(y - oy, size);

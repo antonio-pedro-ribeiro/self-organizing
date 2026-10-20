@@ -9,7 +9,8 @@ Requires Node 20+ and a browser with WebGL2 and float render targets (current Ch
 ```sh
 npm install
 npm run dev        # http://localhost:5173
-npm test           # unit tests
+npm test           # unit and headless acceptance tests (about 5 minutes)
+npm run test:e2e   # browser tests via Playwright, using the installed Chrome
 npm run build      # typecheck and production build
 ```
 
@@ -24,9 +25,9 @@ Keys: `H` hides all UI, `Space` pauses, `1`/`2`/`3` show field only, agents only
 | Order through fluctuations | Change the **seed** and press **Reset with seed**: same parameters, different pattern details | M1 |
 | Autopoiesis | Protocells with production cut off disintegrate (headless test 4 in M2; visible in M3) | M2–M3 |
 | Structural coupling | Same perturbation, different response per protocell (headless test 5 currently fails; see PROGRESS.md) | M3 |
-| Emergence | Colonies and fronts in the metrics | M3–M4 |
+| Emergence | Watch the **plots**: population, order parameter and dissipation change together as colonies spread, with no colony rule in the code | M4 |
 | Cognition | Turn on **trails**: protocell paths curve up the nutrient gradient, away from spots | M3 |
-| Resilience | Damage tool, then watch recolonization | M4 |
+| Resilience | **Wipe 25% of the area** (or click to damage), then watch the population plot recover | M4 (headless test 6 currently fails; see PROGRESS.md) |
 
 ## Layout
 
@@ -34,7 +35,8 @@ Keys: `H` hides all UI, `Space` pauses, `1`/`2`/`3` show field only, agents only
 src/field/    Gray–Scott on the GPU, CPU reference field, presets, initial state
 src/agents/   Protocell rules, population storage, spatial hash, block coupling, headless world
 src/render/   WebGL helpers, field renderer, colormaps, agent discs, trails
-src/ui/       Tweakpane controls
+src/metrics/  Order parameter, dissipation, wavelength, closure index, rolling log
+src/ui/       Tweakpane controls, plots, input
 src/util/     Seeded PRNG
 tests/        Vitest unit tests
 ```

@@ -5,6 +5,7 @@ import { AgentScratch, stepAgents } from '../src/agents/rules';
 import { seedPopulation } from '../src/agents/seed';
 import { World, type WorldConfig } from '../src/agents/World';
 import { PRESETS } from '../src/field/presets';
+import { createFieldSample, orderParameter } from '../src/metrics/fieldMetrics';
 import { mulberry32 } from '../src/util/prng';
 import { StubEnv } from './helpers/StubEnv';
 
@@ -25,6 +26,49 @@ const base: WorldConfig = {
 
 const TICKS_PER_SECOND = 60;
 const LONG_MS = 900_000;
+
+describe('test 1: dissipative structure', () => {
+  it('after cutting the flux, the order parameter falls below 10% within 30 s', () => {
+    // Field only, 128² (the metrics readback size), same easing of F as the app.
+    const field = { ...PRESETS.mitosis };
+    const world = new World({ ...base, fieldSize: 128, initialAgents: 0, field });
+    const sample = createFieldSample(128, 1);
+    const measure = (): number => {
+      world.field.downsample(sample);
+      return orderParameter(sample);
+    };
+
+    // Run until stable: order parameter within 2% over the last 600 ticks (10 s).
+    const history: number[] = [];
+    let pre = 0;
+    for (let t = 1; t <= 12_000; t++) {
+      world.tick();
+      if (t % 10 !== 0) continue;
+      history.push(measure());
+      if (history.length > 60) history.shift();
+      const first = history[0] as number;
+      const last = history[history.length - 1] as number;
+      if (history.length === 60 && first > 0 && Math.abs(last - first) / first < 0.02) {
+        pre = last;
+        console.info(`test 1: stable at tick ${t}, order parameter ${pre.toFixed(4)}`);
+        break;
+      }
+    }
+    expect(pre).toBeGreaterThan(0);
+
+    const ease = 1 - Math.exp(-1 / TICKS_PER_SECOND / 0.12);
+    let fellAt = -1;
+    for (let t = 1; t <= 30 * TICKS_PER_SECOND && fellAt < 0; t++) {
+      field.F += (0 - field.F) * ease;
+      world.tick();
+      if (t % 10 === 0 && measure() < 0.1 * pre) fellAt = t;
+    }
+    console.info(
+      `test 1: ${fellAt > 0 ? `below 10% at tick ${fellAt} (${(fellAt / TICKS_PER_SECOND).toFixed(1)} s)` : `still ${measure().toFixed(4)} after 30 s`}`,
+    );
+    expect(fellAt).toBeGreaterThan(0);
+  }, LONG_MS);
+});
 
 describe('test 4: autopoiesis', () => {
   it('with production cut, every agent dies within 200 ticks', () => {

@@ -24,6 +24,10 @@ export interface UiState {
   /** 1 field only, 2 agents only, 3 both (SPEC.md section 5). */
   view: ViewMode;
   trails: boolean;
+  /** When on, clicking the field wipes a disc of field and agents. */
+  damageOnClick: boolean;
+  /** Damage radius in field cells. */
+  damageRadius: number;
 }
 
 export type ViewMode = 1 | 2 | 3;
@@ -32,6 +36,9 @@ export interface UiActions {
   reset: () => void;
   step: () => void;
   colormapChanged: () => void;
+  /** Wipe 25% of the area, centred (the test 6 perturbation). */
+  damageQuarter: () => void;
+  downloadCsv: () => void;
 }
 
 export interface Controls {
@@ -76,6 +83,12 @@ export function createControls(state: UiState, actions: UiActions): Controls {
   life.addBinding(state.agents, 'sensingNoise', { min: 0, max: 1, step: 0.01, label: 'sensing noise' });
   life.addBinding(state.agents, 'productionCut', { label: 'cut production' });
   life.addBinding(state, 'initialAgents', { min: 0, max: 2000, step: 10, label: 'initial (on reset)' });
+
+  const perturb = pane.addFolder({ title: 'Perturb and record' });
+  perturb.addBinding(state, 'damageOnClick', { label: 'click to damage' });
+  perturb.addBinding(state, 'damageRadius', { min: 8, max: 200, step: 1, label: 'damage radius' });
+  perturb.addButton({ title: 'Wipe 25% of the area' }).on('click', actions.damageQuarter);
+  perturb.addButton({ title: 'Download metrics CSV' }).on('click', actions.downloadCsv);
 
   const look = pane.addFolder({ title: 'Look' });
   look.addBinding(state, 'view', { options: { 'Field only (1)': 1, 'Agents only (2)': 2, 'Both (3)': 3 }, label: 'view' });

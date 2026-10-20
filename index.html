@@ -27,6 +27,22 @@
         pointer-events: none;
         user-select: none;
       }
+      #plots {
+        position: fixed;
+        left: 12px;
+        top: 12px;
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        padding: 6px;
+        background: rgba(5, 6, 10, 0.72);
+        border-radius: 6px;
+        color: rgba(255, 255, 255, 0.7);
+      }
+      #plots .u-title {
+        font-size: 11px;
+        font-weight: normal;
+      }
       #error {
         display: none;
         position: fixed;
@@ -42,6 +58,7 @@
   <body>
     <canvas id="view"></canvas>
     <div id="hud"></div>
+    <div id="plots"></div>
     <div id="error"></div>
     <script type="module" src="/src/main.ts"></script>
   </body>

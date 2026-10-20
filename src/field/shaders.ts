@@ -85,7 +85,7 @@ void main() {
 }
 `;
 
-/** Block means for the agent readback: one output texel per uBlock² field texels. */
+/** Block means for readback, one output texel per uBlock² field texels: R mean u, G mean v, B mean u·v². */
 export const DOWNSAMPLE_FRAG = `#version 300 es
 precision highp float;
 uniform sampler2D uState;
@@ -94,13 +94,14 @@ out vec4 outMean;
 
 void main() {
   ivec2 origin = ivec2(gl_FragCoord.xy) * uBlock;
-  vec2 sum = vec2(0.0);
+  vec3 sum = vec3(0.0);
   for (int y = 0; y < uBlock; y++) {
     for (int x = 0; x < uBlock; x++) {
-      sum += texelFetch(uState, origin + ivec2(x, y), 0).rg;
+      vec2 c = texelFetch(uState, origin + ivec2(x, y), 0).rg;
+      sum += vec3(c, c.x * c.y * c.y);
     }
   }
-  outMean = vec4(sum / float(uBlock * uBlock), 0.0, 1.0);
+  outMean = vec4(sum / float(uBlock * uBlock), 1.0);
 }
 `;
 
@@ -117,5 +118,22 @@ void main() {
   vec2 c = texelFetch(uState, p, 0).rg;
   vec2 d = texelFetch(uUpdate, p / uBlock, 0).rg;
   outState = vec4(clamp(c.x * d.x, 0.0, 1.0), clamp(c.y + d.y, 0.0, 1.0), 0.0, 1.0);
+}
+`;
+
+/** Damage: reset a disc (torus distance) to the homogeneous state u = 1, v = 0. */
+export const WIPE_FRAG = `#version 300 es
+precision highp float;
+uniform sampler2D uState;
+uniform vec2 uCenter;
+uniform float uRadius;
+uniform float uSize;
+out vec4 outState;
+
+void main() {
+  vec2 c = texelFetch(uState, ivec2(gl_FragCoord.xy), 0).rg;
+  vec2 d = abs(gl_FragCoord.xy - uCenter);
+  d = min(d, uSize - d);
+  outState = length(d) < uRadius ? vec4(1.0, 0.0, 0.0, 1.0) : vec4(c, 0.0, 1.0);
 }
 `;

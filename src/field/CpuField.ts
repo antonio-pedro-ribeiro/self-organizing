@@ -1,3 +1,4 @@
+import type { FieldSample } from '../metrics/fieldMetrics';
 import { torusDistance } from '../util/torus';
 import { initialFieldData } from './initial';
 import { DT, DU, DV, LAPLACIAN, type FieldParams } from './presets';
@@ -108,6 +109,33 @@ export class CpuField {
           v[i] = clamp01((v[i] as number) + add);
         }
       }
+    }
+  }
+
+  /** Block means of u, v and u·v² into a metrics sample, like the GPU metrics readback. */
+  downsample(sample: FieldSample): void {
+    const s = this.size;
+    const block = s / sample.size;
+    const g = sample.size;
+    sample.u.fill(0);
+    sample.v.fill(0);
+    sample.uvv.fill(0);
+    for (let y = 0; y < s; y++) {
+      const brow = Math.floor(y / block) * g;
+      for (let x = 0; x < s; x++) {
+        const b = brow + Math.floor(x / block);
+        const u = this.u[y * s + x] as number;
+        const v = this.v[y * s + x] as number;
+        sample.u[b] = (sample.u[b] as number) + u;
+        sample.v[b] = (sample.v[b] as number) + v;
+        sample.uvv[b] = (sample.uvv[b] as number) + u * v * v;
+      }
+    }
+    const inv = 1 / (block * block);
+    for (let b = 0; b < g * g; b++) {
+      sample.u[b] = (sample.u[b] as number) * inv;
+      sample.v[b] = (sample.v[b] as number) * inv;
+      sample.uvv[b] = (sample.uvv[b] as number) * inv;
     }
   }
 

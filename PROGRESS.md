@@ -79,8 +79,32 @@ Gate results at the time (`npm test`, 34 tests; M3 changed the numbers, see belo
   - give seeded agents a margin (break-even about 0.5), so populations grow reliably but erase the pattern;
   - redesign the energy model so agents cannot draw u below the pattern regime.
 
+## M4 Metrics: gate passed (test 1)
+
+Started at the user's request with the M3 gate still open (test 6).
+
+Built:
+- `src/metrics/`: order parameter (std of v), dissipation proxy (mean u·v², computed per cell in the readback shader, not from block means), pattern wavelength (radially averaged power spectrum of v via a radix-2 FFT, in field cells), closure index, population and distinct lineages, mean energy. `MetricsLog` is a 20,000-sample rolling buffer with CSV export.
+- Metrics readback: a second `FieldCoupling` at block size 4 gives the 128×128 readback (R mean u, G mean v, B mean u·v²), every 10 frames.
+- Live uPlot plots (population, mean energy, order parameter, dissipation), top left, about the last 100 s. `H` hides them with the rest of the UI.
+- Damage tool: "click to damage" with a radius, plus a "Wipe 25% of the area" button. Queued wipes run at the start of a frame (GPU wipe pass plus agent removal). Also "Download metrics CSV". Cut flux already existed.
+- Playwright (`npm run test:e2e`), using the installed Chrome (`channel: 'chrome'`), with no browser download. `?test` in the URL exposes `window.__selforg` for the tests.
+
+Results:
+- **Test 1, headless** (128², field only): stable at tick 960 with order parameter 0.1197. It fell below 10% of that 20 ticks (0.3 s) after the cut.
+- **Test 1, browser** (512², field only, headless Chrome): stable order parameter 0.0990 at 60 fps. It fell below 10% 0.5 s after the cut.
+- **Smoke test, browser, default app:** after 20 s there were 2519 protocells at 60 fps, with no page errors. Metrics: 199 lineages, mean energy 0.68, closure index 0.83, order parameter 0.023, and wavelength 512, meaning no pattern is left. This also covers the M3 browser check: discs, trails and plots render (screenshot in `test-results/`).
+- `npm test`: 50 tests, 49 pass. Test 6 still fails, as recorded under M3.
+
+Assumptions and deviations:
+- **Test 1 runs field only** (0 agents), because the concept is the field's dissipative structure. With agents, the pattern is mostly grazed away before the cut.
+- **"Run until stable"** means the order parameter is within 2% over 10 s (600 ticks headless; 6 samples 2 s apart in the browser).
+- **Closure index:** "repair rate over the last 50 ticks" is an exponential moving average with a 50-tick window, for both repair and decay. An agent counts as self-maintaining when its repair is at least 0.95× its decay. With ageing, decay creeps up, so at steady state repair lags decay very slightly; a strict ≥ would read near 0 for healthy agents. The 0.95 is a reading of the definition; no test uses it.
+- **Metrics `timeS`** is wall-clock seconds since the last reset.
+- **Visual artefact:** death bursts show as hard-edged squares, because emitted v is spread evenly over an 8×8 block. For M5: smooth the emission in the apply shader.
+- **Headless vs browser:** at the same density, the headless 256² test population freezes, while the 512² browser run grows (about 2500 agents after 20 s, matching the headless 512² run). This fits the break-even explanation under M3: whether a population takes off depends on early conditions.
+
 ## Next
 
-1. Decide the energy-balance question above (test 6 and the agent–pattern trade-off).
-2. Run the browser check for M3: agents visible, trails, view modes, frame rate.
-3. M4 was started at the user's request with the M3 gate still open (test 6).
+1. Decide the energy-balance question under M3 (test 6 and the agent–pattern trade-off).
+2. M5: bloom, flow overlay, network overlay, lineage view, brush; gate test 8 (5000 agents at 60 fps with all Must items on).
