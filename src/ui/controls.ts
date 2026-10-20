@@ -1,7 +1,7 @@
 import { Pane } from 'tweakpane';
 import { COLORMAP_NAMES, type ColormapName } from '../render/colormap';
-import type { AgentParams } from '../agents/params';
-import { PRESETS, PRESET_NAMES, RANGES, type PresetName } from '../field/presets';
+import { DEFAULT_AGENT_PARAMS, DEFAULT_INITIAL_AGENTS, type AgentParams } from '../agents/params';
+import { DEFAULT_PRESET, PRESETS, PRESET_NAMES, RANGES, type PresetName } from '../field/presets';
 
 /** Everything the UI can change. main.ts owns one instance and reads it every frame. */
 export interface UiState {
@@ -35,6 +35,33 @@ export interface UiState {
 }
 
 export type ViewMode = 1 | 2 | 3 | 4;
+
+/** The state the app starts with. */
+export function createDefaultState(): UiState {
+  const start = PRESETS[DEFAULT_PRESET];
+  return {
+    preset: DEFAULT_PRESET,
+    F: start.F,
+    k: start.k,
+    cutFlux: false,
+    stepsPerFrame: 8,
+    speed: 1,
+    vMax: 0.35,
+    colormap: 'magma',
+    seed: 1,
+    paused: false,
+    agents: { ...DEFAULT_AGENT_PARAMS },
+    initialAgents: DEFAULT_INITIAL_AGENTS,
+    view: 3,
+    trails: true,
+    bloom: true,
+    bloomStrength: 0.8,
+    flow: false,
+    lineageView: true,
+    brush: 'off',
+    brushRadius: 24,
+  };
+}
 export type BrushMode = 'off' | 'noise' | 'nutrient' | 'damage';
 
 export interface UiActions {
@@ -44,6 +71,12 @@ export interface UiActions {
   /** Wipe 25% of the area, centred (the test 6 perturbation). */
   damageQuarter: () => void;
   downloadCsv: () => void;
+  /** Start or stop the automatic F sweep at the current k. */
+  toggleSweep: () => void;
+  snapshot: () => void;
+  record: () => void;
+  exportState: () => void;
+  importState: () => void;
 }
 
 export interface Controls {
@@ -97,6 +130,13 @@ export function createControls(state: UiState, actions: UiActions): Controls {
   perturb.addBinding(state, 'brushRadius', { min: 4, max: 200, step: 1, label: 'brush radius' });
   perturb.addButton({ title: 'Wipe 25% of the area' }).on('click', actions.damageQuarter);
   perturb.addButton({ title: 'Download metrics CSV' }).on('click', actions.downloadCsv);
+
+  const analysis = pane.addFolder({ title: 'Analysis and capture' });
+  analysis.addButton({ title: 'Run / stop F sweep (k fixed)' }).on('click', actions.toggleSweep);
+  analysis.addButton({ title: 'Snapshot PNG' }).on('click', actions.snapshot);
+  analysis.addButton({ title: 'Record 10 s WebM' }).on('click', actions.record);
+  analysis.addButton({ title: 'Export state JSON' }).on('click', actions.exportState);
+  analysis.addButton({ title: 'Import state JSON' }).on('click', actions.importState);
 
   const look = pane.addFolder({ title: 'Look' });
   look.addBinding(state, 'view', {

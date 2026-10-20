@@ -1,6 +1,6 @@
 import type { FieldSample } from '../metrics/fieldMetrics';
 import { torusDistance } from '../util/torus';
-import { initialFieldData } from './initial';
+import { initialFieldData, type Patch } from './initial';
 import { DT, DU, DV, LAPLACIAN, type FieldParams } from './presets';
 
 /**
@@ -158,6 +158,20 @@ export class CpuField {
       sample.u[b] = (sample.u[b] as number) * inv;
       sample.v[b] = (sample.v[b] as number) * inv;
       sample.uvv[b] = (sample.uvv[b] as number) * inv;
+    }
+  }
+
+  /** Set square patches to u = 0.5, v = 0.25, as in the initial state (wrapping). */
+  seedPatches(patches: Patch[]): void {
+    const s = this.size;
+    for (const { cx, cy, half } of patches) {
+      for (let dy = -half; dy <= half; dy++) {
+        for (let dx = -half; dx <= half; dx++) {
+          const i = (((cy + dy) % s) + s) % s * s + ((((cx + dx) % s) + s) % s);
+          this.u[i] = 0.5;
+          this.v[i] = 0.25;
+        }
+      }
     }
   }
 

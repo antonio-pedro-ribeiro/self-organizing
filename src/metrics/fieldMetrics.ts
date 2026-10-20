@@ -48,7 +48,8 @@ export function dissipation(sample: FieldSample): number {
 
 /**
  * Peak of the radially averaged power spectrum of v, as a wavelength in
- * field cells. Returns 0 when the field is flat.
+ * field cells. The peak is refined between frequency bins by a parabola
+ * through its neighbours. Returns 0 when the field is flat.
  */
 export function patternWavelength(sample: FieldSample): number {
   const n = sample.size;
@@ -69,14 +70,46 @@ export function patternWavelength(sample: FieldSample): number {
       count[k] = (count[k] as number) + 1;
     }
   }
+  const radial = (k: number): number => (sum[k] as number) / Math.max(1, count[k] as number);
   let best = 0;
   let bestPower = 0;
   for (let k = 1; k <= half; k++) {
-    const p = (sum[k] as number) / Math.max(1, count[k] as number);
-    if (p > bestPower) {
-      bestPower = p;
+    if (radial(k) > bestPower) {
+      bestPower = radial(k);
       best = k;
     }
   }
-  return best === 0 ? 0 : (n / best) * sample.cellScale;
+  if (best === 0) return 0;
+  let peak = best;
+  if (best > 1 && best < half) {
+    const a = radial(best - 1);
+    const c = radial(best + 1);
+    const denom = a - 2 * bestPower + c;
+    if (denom < 0) peak = best + (0.5 * (a - c)) / denom;
+  }
+  return (n / peak) * sample.cellScale;
+}
+
+/** Pearson correlation of two equally sized fields (0 if either is flat). */
+export function pearson(a: Float32Array, b: Float32Array): number {
+  const n = a.length;
+  let ma = 0;
+  let mb = 0;
+  for (let i = 0; i < n; i++) {
+    ma += a[i] as number;
+    mb += b[i] as number;
+  }
+  ma /= n;
+  mb /= n;
+  let sab = 0;
+  let saa = 0;
+  let sbb = 0;
+  for (let i = 0; i < n; i++) {
+    const da = (a[i] as number) - ma;
+    const db = (b[i] as number) - mb;
+    sab += da * db;
+    saa += da * da;
+    sbb += db * db;
+  }
+  return saa > 0 && sbb > 0 ? sab / Math.sqrt(saa * sbb) : 0;
 }

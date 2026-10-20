@@ -1,6 +1,7 @@
 import { createProgram, FULLSCREEN_VERT, uniform } from '../render/gl';
 import type { GrayScott } from './GrayScott';
-import { APPLY_FRAG, BRUSH_FRAG, DOWNSAMPLE_FRAG, WIPE_FRAG } from './shaders';
+import type { Patch } from './initial';
+import { APPLY_FRAG, BRUSH_FRAG, DOWNSAMPLE_FRAG, PATCH_FRAG, WIPE_FRAG } from './shaders';
 
 /**
  * The GPU side of coupling the field to the CPU (SPEC.md section 3, steps 3
@@ -19,6 +20,8 @@ export class FieldCoupling {
   private readonly apply: WebGLProgram;
   private readonly wipeProgram: WebGLProgram;
   private readonly wipeLoc: Record<'state' | 'center' | 'radius' | 'size', WebGLUniformLocation>;
+  private readonly patchProgram: WebGLProgram;
+  private readonly patchLoc: Record<'state' | 'patches' | 'count' | 'size', WebGLUniformLocation>;
   private readonly brushProgram: WebGLProgram;
   private readonly brushLoc: Record<'state' | 'center' | 'radius' | 'size' | 'mode' | 'seed', WebGLUniformLocation>;
   private readonly meanTexture: WebGLTexture;
@@ -52,6 +55,13 @@ export class FieldCoupling {
       center: uniform(gl, this.wipeProgram, 'uCenter'),
       radius: uniform(gl, this.wipeProgram, 'uRadius'),
       size: uniform(gl, this.wipeProgram, 'uSize'),
+    };
+    this.patchProgram = createProgram(gl, FULLSCREEN_VERT, PATCH_FRAG);
+    this.patchLoc = {
+      state: uniform(gl, this.patchProgram, 'uState'),
+      patches: uniform(gl, this.patchProgram, 'uPatches'),
+      count: uniform(gl, this.patchProgram, 'uCount'),
+      size: uniform(gl, this.patchProgram, 'uSize'),
     };
     this.brushProgram = createProgram(gl, FULLSCREEN_VERT, BRUSH_FRAG);
     this.brushLoc = {
@@ -178,6 +188,21 @@ export class FieldCoupling {
     gl.uniform1f(this.brushLoc.size, this.field.size);
     gl.uniform1i(this.brushLoc.mode, mode === 'noise' ? 0 : 1);
     gl.uniform1f(this.brushLoc.seed, seed);
+    this.field.pass(() => gl.drawArrays(gl.TRIANGLES, 0, 3));
+  }
+
+  /** Seed up to 8 patches of the autocatalytic species, as in the initial state. */
+  seedPatches(patches: Patch[]): void {
+    const { gl } = this;
+    const list = patches.slice(0, 8);
+    const data = new Float32Array(24);
+    list.forEach((p, i) => data.set([p.cx, p.cy, p.half], i * 3));
+    gl.useProgram(this.patchProgram);
+    gl.bindVertexArray(this.vao);
+    gl.uniform1i(this.patchLoc.state, 0);
+    gl.uniform3fv(this.patchLoc.patches, data);
+    gl.uniform1i(this.patchLoc.count, list.length);
+    gl.uniform1f(this.patchLoc.size, this.field.size);
     this.field.pass(() => gl.drawArrays(gl.TRIANGLES, 0, 3));
   }
 

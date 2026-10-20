@@ -1,24 +1,24 @@
-import { BLOCK_SIZE, BlockEnvironment } from './agents/BlockEnvironment';
-import { wipeAgents } from './agents/damage';
-import { AGENT_CAP, DEFAULT_AGENT_PARAMS, DEFAULT_INITIAL_AGENTS } from './agents/params';
-import { Population } from './agents/Population';
-import { AgentScratch, stepAgents } from './agents/rules';
-import { seedPopulation } from './agents/seed';
-import { agentSeed } from './agents/World';
-import { FieldCoupling } from './field/FieldCoupling';
-import { GrayScott } from './field/GrayScott';
-import { DEFAULT_PRESET, FIELD_SIZE, PRESETS, type FieldParams } from './field/presets';
-import { createFieldSample, fillFromRgba } from './metrics/fieldMetrics';
+import { AGENT_CAP } from './agents/params';
+import { BrowserSim } from './field/BrowserSim';
+import { perturbationPatches } from './field/initial';
+import { FIELD_SIZE, type FieldParams } from './field/presets';
+import { patternWavelength } from './metrics/fieldMetrics';
 import { topLineages } from './metrics/lineages';
 import { MetricsLog } from './metrics/MetricsLog';
-import { METRICS_EVERY, METRICS_GRID, takeSample } from './metrics/sample';
+import { METRICS_EVERY, takeSample } from './metrics/sample';
+import { abruptSteps, DEFAULT_SWEEP, hysteresis, SweepRunner, type SweepConfig } from './metrics/sweep';
 import { createGl } from './render/gl';
 import { Scene } from './render/Scene';
-import { createControls, type UiState } from './ui/controls';
+import { createBifurcationPanel, describeHysteresis } from './ui/bifurcation';
+import { recordWebm, snapshotPng } from './ui/capture';
+import { mulberry32 } from './util/prng';
+import { createControls, createDefaultState } from './ui/controls';
+import { downloadBlob, pickTextFile } from './ui/download';
 import { bindInput } from './ui/input';
 import { createLineageChart } from './ui/lineageChart';
 import { createPlots } from './ui/plots';
-import { mulberry32, type Rng } from './util/prng';
+import { stateFromJson, stateToJson } from './ui/stateJson';
+import './ui/testHook';
 
 /** Parameter changes ease in over about half a second; they never jump. */
 const EASE_TIME_CONSTANT_S = 0.12;
@@ -26,21 +26,6 @@ const EASE_TIME_CONSTANT_S = 0.12;
 const MAX_TICKS_PER_FRAME = 4;
 /** While dragging, a new ripple every this many ms. */
 const RIPPLE_EVERY_MS = 150;
-
-declare global {
-  interface Window {
-    /** Present only with `?test` in the URL, for the Playwright tests. */
-    __selforg?: {
-      state: UiState;
-      log: MetricsLog;
-      reset: () => void;
-      refresh: () => void;
-      /** Frames drawn since load; mean frame work and simulation time in ms (includes the GPU with `?sync`). */
-      perf: { frames: number; workMs: number; simMs: number; agentMs: number };
-      population: () => number;
-    };
-  }
-}
 
 function showError(message: string): void {
   const el = document.getElementById('error');
@@ -65,94 +50,44 @@ function main(): void {
   }
 
   const params = new URLSearchParams(window.location.search);
-  const start = PRESETS[DEFAULT_PRESET];
-  const state: UiState = {
-    preset: DEFAULT_PRESET,
-    F: start.F,
-    k: start.k,
-    cutFlux: false,
-    stepsPerFrame: 8,
-    speed: 1,
-    vMax: 0.35,
-    colormap: 'magma',
-    seed: 1,
-    paused: false,
-    agents: { ...DEFAULT_AGENT_PARAMS },
-    initialAgents: DEFAULT_INITIAL_AGENTS,
-    view: 3,
-    trails: true,
-    bloom: true,
-    bloomStrength: 0.8,
-    flow: false,
-    lineageView: true,
-    brush: 'off',
-    brushRadius: 24,
-  };
-
-  const field = new GrayScott(gl, FIELD_SIZE);
-  const coupling = new FieldCoupling(gl, field, BLOCK_SIZE);
-  const metricsReader = new FieldCoupling(gl, field, FIELD_SIZE / METRICS_GRID);
-  const fieldSample = createFieldSample(METRICS_GRID, FIELD_SIZE / METRICS_GRID);
+  const state = createDefaultState();
+  const sim = new BrowserSim(gl, FIELD_SIZE);
   const log = new MetricsLog();
-  const env = new BlockEnvironment(FIELD_SIZE, BLOCK_SIZE);
-  const pop = new Population(AGENT_CAP);
-  const scratch = new AgentScratch(FIELD_SIZE, AGENT_CAP);
-  const update = new Float32Array(env.grid * env.grid * 2);
   const scene = new Scene(gl, FIELD_SIZE, AGENT_CAP, state.colormap);
   const plots = createPlots(plotsEl);
   const lineages = createLineageChart(plotsEl);
+  const bifurcation = createBifurcationPanel(plotsEl);
   const effective: FieldParams = { F: state.F, k: state.k };
   const damageQueue: { x: number; y: number; r: number }[] = [];
   const brush = { active: false, x: 0, y: 0, lastRipple: 0 };
   const perf = { frames: 0, workMs: 0, simMs: 0, agentMs: 0 };
   const sync = params.has('sync');
-  let rng: Rng = mulberry32(agentSeed(state.seed));
+  let sweep: SweepRunner | null = null;
+  let sweepStep = -1;
+  let sweepRng = mulberry32(0);
+  let snapshotRequested = false;
   let tickAccumulator = 0;
   let queuedTicks = 0;
-  let ticks = 0;
   let runStart = performance.now();
   let hudVisible = true;
 
   const reset = (): void => {
-    field.reset(state.seed);
-    pop.clear();
-    rng = mulberry32(agentSeed(state.seed));
-    seedPopulation(pop, state.initialAgents, FIELD_SIZE, rng);
-    coupling.restart();
-    metricsReader.restart();
+    sim.reset(state.seed, state.initialAgents);
     scene.clearTrails();
     log.clear();
     lineages.clear();
-    ticks = 0;
     runStart = performance.now();
   };
   reset();
 
-  /**
-   * One tick: SPEC.md section 3, steps 2 to 5. Agents sense the newest
-   * finished readback (normally the previous frame's), so their CPU work
-   * overlaps the GPU's field steps instead of waiting for them.
-   */
-  const tick = (): void => {
-    field.step(state.stepsPerFrame, effective);
-    env.load(coupling.readBackAsync(), 4, 0);
-    const agentStart = performance.now();
-    stepAgents(pop, env, state.agents, rng, scratch);
-    perf.agentMs += (performance.now() - agentStart - perf.agentMs) * 0.05;
-    env.writeUpdate(update);
-    coupling.write(update);
-    ticks++;
+  const startSweep = (config: Partial<SweepConfig> = {}): void => {
+    state.cutFlux = false;
+    sweep = new SweepRunner({ ...DEFAULT_SWEEP, ...config }, sim.ticks);
+    sweepStep = -1;
+    sweepRng = mulberry32(state.seed + 1);
   };
 
-  const downloadCsv = (): void => {
-    const url = URL.createObjectURL(new Blob([log.toCsv()], { type: 'text/csv' }));
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `self-organizing-seed${state.seed}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
-
+  const stamp = (): string => `seed${state.seed}-${new Date().toISOString().replace(/[:.]/g, '-')}`;
   const controls = createControls(state, {
     reset,
     step: () => {
@@ -162,7 +97,29 @@ function main(): void {
     damageQuarter: () => {
       damageQueue.push({ x: FIELD_SIZE / 2, y: FIELD_SIZE / 2, r: Math.sqrt((0.25 * FIELD_SIZE * FIELD_SIZE) / Math.PI) });
     },
-    downloadCsv,
+    downloadCsv: () => downloadBlob(new Blob([log.toCsv()], { type: 'text/csv' }), `self-organizing-${stamp()}.csv`),
+    toggleSweep: () => {
+      if (sweep && !sweep.done) sweep = null;
+      else startSweep();
+    },
+    snapshot: () => {
+      snapshotRequested = true;
+    },
+    record: () => {
+      recordWebm(canvas, 10, `self-organizing-${stamp()}.webm`).catch((e: Error) => window.alert(e.message));
+    },
+    exportState: () =>
+      downloadBlob(new Blob([stateToJson(state)], { type: 'application/json' }), `self-organizing-${stamp()}.json`),
+    importState: () => {
+      pickTextFile('application/json,.json')
+        .then((text) => {
+          Object.assign(state, stateFromJson(text, state));
+          scene.setColormap(state.colormap);
+          controls.refresh();
+          reset();
+        })
+        .catch((e: Error) => window.alert(e.message));
+    },
   });
 
   bindInput(canvas, FIELD_SIZE, () => scene.viewport(canvas.width, canvas.height), {
@@ -182,9 +139,7 @@ function main(): void {
     },
     brushAt: (x, y, first) => {
       if (state.brush === 'off') return;
-      brush.active = true;
-      brush.x = x;
-      brush.y = y;
+      Object.assign(brush, { active: true, x, y });
       if (first) brush.lastRipple = 0;
     },
     brushEnd: () => {
@@ -193,7 +148,19 @@ function main(): void {
   });
 
   if (params.has('test')) {
-    window.__selforg = { state, log, reset, refresh: () => controls.refresh(), perf, population: () => pop.count };
+    window.__selforg = {
+      state,
+      log,
+      reset,
+      refresh: () => controls.refresh(),
+      perf,
+      population: () => sim.pop.count,
+      ticks: () => sim.ticks,
+      startSweep,
+      sweep: () => (sweep ? { done: sweep.done, progress: sweep.progress, points: sweep.points } : null),
+      fieldV: () => Array.from(sim.sample.v),
+      wavelength: () => patternWavelength(sim.sample),
+    };
   }
 
   const resize = (): void => {
@@ -219,22 +186,26 @@ function main(): void {
     if (dt > 0) fps += (1 / dt - fps) * 0.05;
 
     // 1. Parameters and queued user actions.
+    if (sweep && !sweep.done) {
+      state.F = sweep.currentF;
+      if (sweep.step !== sweepStep) {
+        sweepStep = sweep.step;
+        sim.seedPatches(perturbationPatches(FIELD_SIZE, sweepRng, sweep.config.perturbPatches));
+      }
+    }
     const targetF = state.cutFlux ? 0 : state.F;
     const alpha = 1 - Math.exp(-dt / EASE_TIME_CONSTANT_S);
     effective.F += (targetF - effective.F) * alpha;
     effective.k += (state.k - effective.k) * alpha;
     if (brush.active && state.brush !== 'off') {
       if (state.brush === 'damage') damageQueue.push({ x: brush.x, y: brush.y, r: state.brushRadius });
-      else coupling.brush(state.brush, brush.x, brush.y, state.brushRadius, now % 1000);
+      else sim.brush(state.brush, brush.x, brush.y, state.brushRadius, now % 1000);
       if (now - brush.lastRipple > RIPPLE_EVERY_MS) {
         scene.ripples.add(brush.x, brush.y, state.brushRadius, now);
         brush.lastRipple = now;
       }
     }
-    for (const d of damageQueue.splice(0)) {
-      coupling.wipe(d.x, d.y, d.r);
-      wipeAgents(pop, d.x, d.y, d.r, FIELD_SIZE);
-    }
+    for (const d of damageQueue.splice(0)) sim.damage(d.x, d.y, d.r);
 
     // 2–5. Simulation ticks.
     let n = 0;
@@ -247,25 +218,35 @@ function main(): void {
       tickAccumulator -= Math.floor(tickAccumulator);
     }
     const simStart = performance.now();
-    for (let t = 0; t < n; t++) tick();
+    for (let t = 0; t < n; t++) sim.tick(state.stepsPerFrame, effective, state.agents);
     if (sync) gl.finish();
     perf.simMs += (performance.now() - simStart - perf.simMs) * 0.05;
+    perf.agentMs = sim.agentMs;
 
-    // 6. Metrics every 10 frames.
+    // 6. Metrics every 10 frames, and the sweep that reads them.
     perf.frames++;
     if (perf.frames % METRICS_EVERY === 0) {
-      fillFromRgba(fieldSample, metricsReader.readBackAsync());
-      log.push(takeSample(ticks, (now - runStart) / 1000, effective, fieldSample, pop));
+      const sample = takeSample(sim.ticks, (now - runStart) / 1000, effective, sim.readSample(), sim.pop);
+      log.push(sample);
+      sweep?.observe(sim.ticks, sample.orderParameter);
       if (hudVisible) plots.update(log);
-      if (hudVisible && state.lineageView) lineages.push(topLineages(pop, 8));
+      if (hudVisible && state.lineageView) lineages.push(topLineages(sim.pop, 8));
+      if (sweep) {
+        const orders = sweep.points.map((p) => p.order);
+        const text = sweep.done
+          ? `Done: ${abruptSteps(orders).length} jumps over 3×; ${describeHysteresis(hysteresis(sweep.points))}`
+          : `Sweeping at k ${state.k.toFixed(4)}: ${Math.round(sweep.progress * 100)}%`;
+        bifurcation.update(sweep.points, effective.F, text);
+      }
     }
     lineages.setVisible(hudVisible && state.lineageView);
+    bifurcation.setVisible(hudVisible && sweep !== null);
 
     // 7. Render.
     scene.draw({
-      fieldTexture: field.texture,
-      pop,
-      env,
+      fieldTexture: sim.field.texture,
+      pop: sim.pop,
+      env: sim.env,
       canvasW: canvas.width,
       canvasH: canvas.height,
       dpr: Math.min(window.devicePixelRatio || 1, 2),
@@ -277,6 +258,10 @@ function main(): void {
       bloomStrength: state.bloomStrength,
       flow: state.flow,
     });
+    if (snapshotRequested) {
+      snapshotRequested = false;
+      snapshotPng(canvas, `self-organizing-${stamp()}.png`);
+    }
     if (sync) gl.finish();
     perf.workMs += (performance.now() - workStart - perf.workMs) * 0.05;
 
@@ -284,7 +269,7 @@ function main(): void {
     if (hudVisible && hudTimer > 0.25) {
       hudTimer = 0;
       hud.textContent =
-        `${fps.toFixed(0)} fps · ${pop.count} protocells · F ${effective.F.toFixed(4)} · k ${effective.k.toFixed(4)}` +
+        `${fps.toFixed(0)} fps · ${sim.pop.count} protocells · F ${effective.F.toFixed(4)} · k ${effective.k.toFixed(4)}` +
         ` · ${state.paused ? 'paused' : `${state.stepsPerFrame} steps/tick`}  ·  1–4 view · H hides UI`;
     }
     requestAnimationFrame(frame);

@@ -40,6 +40,7 @@ export function createLineageChart(container: HTMLElement): LineageChart {
     ctx.clearRect(0, 0, w, h);
     const col = w / HISTORY;
     history.forEach((shares, i) => {
+      if (shares.length === 0) return; // no population: nothing to stack
       const x = w - (history.length - i) * col;
       // Sorted by lineage id so each band keeps its place over time.
       const sorted = [...shares].sort((a, b) => a.lineage - b.lineage);

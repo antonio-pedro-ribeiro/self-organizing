@@ -140,7 +140,44 @@ Known issues:
 - Chrome logs "READ-usage buffer was written, then fenced, but written again before being read back" for the readback buffer, about 256 times in 6 s (likely Chrome's cap). The fence is checked without blocking and 60 fps holds, so this is a slower read path, not a stall. Not resolved.
 - Network lines between close agents are partly hidden under the discs, which are drawn on top.
 
+## M6 Analysis: gate passed (tests 2 and 3)
+
+Built:
+- **F sweep and bifurcation panel:** `src/metrics/sweep.ts` holds the `SweepRunner`, abrupt-step detection and the hysteresis report. The panel (`src/ui/bifurcation.ts`) plots order parameter against F with the up (orange) and down (blue) branches and a dashed marker at the current F. It reports both transitions and the largest gap between the branches. Start it with "Run / stop F sweep (k fixed)".
+- **Sweep protocol:** F from 0.02 to 0.07 in steps of 0.0025, up then down, at the current k. Each value is held 300 ticks, and the order parameter is averaged over the last 100.
+- **Sweep perturbation (protocol decision):** at the start of each step, 4 seeded patches of the autocatalytic species are added, the same shape as the initial patches (`perturbationPatches`, `CpuField.seedPatches`, GPU `PATCH_FRAG`). Measured without them (128², headless), the order parameter was 0.000 at every F on both branches: once uniform, the field never leaves without a fluctuation, so the sweep shows nothing. This follows SPEC.md section 2, "seeded noise at critical parameter values".
+- **Pattern wavelength:** the spectral peak is refined between frequency bins with a parabola through its neighbours, since whole bins are about 8% apart at Mitosis scale.
+- **Capture:** PNG snapshot (taken inside the frame callback) and a 10 s WebM via MediaRecorder (VP9, then VP8 if unavailable, 8 Mbit/s).
+- **JSON state:** export and import of parameters plus seed (`src/ui/stateJson.ts`). Import checks every value against its control's range, lists every problem, and changes nothing if any value is invalid. Missing fields keep their values; unknown fields are ignored. A successful import resets with the imported seed.
+- **Presets:** each was run field only for 25 s at speed 4 (6000 ticks) at 512² and checked on screenshots.
+  - Mitosis: spots, wavelength 12.2 cells.
+  - Coral: a labyrinth filling the field, 11.5 cells.
+  - Worms: spreading worm-like stripes.
+  - Chaos: chaotic waves and rings.
+  The values stay as the spec gives them; none needed retuning.
+- **Refactor:** `src/field/BrowserSim.ts` (the GPU field coupled to CPU agents), `createDefaultState()` in controls, the test-hook type in `src/ui/testHook.ts`, and download and capture helpers. Every module is still under 300 lines (main.ts: 280).
+- **Scripts:** `npm test` now runs the fast unit tests only; `npm run test:acceptance` runs the headless acceptance tests (about 10 minutes); `npm run test:e2e` runs the browser tests.
+
+Results:
+- **Test 2, headless** (128², Mitosis k 0.0649, field only): up branch 0.000 until F 0.0275, then 0.031 at 0.0300. Down branch: pattern held down to 0.0225 (0.036), then 0.000 at 0.0200. One abrupt step per branch. Hysteresis: jump up at F ≈ 0.0288, down at F ≈ 0.0213, largest gap 0.104 at F 0.0275.
+- **Test 2, browser** (512²): up branch 0.000 until F 0.035, then 0.022 at 0.0375. Down branch held 0.056 at 0.0225, then 0.004 at 0.0200. One abrupt step per branch. The panel reported a jump up at F 0.0363, down at F 0.0212, and the largest gap 0.0938 at F 0.035. The window where the pattern can exist but doesn't arise on the way up is wider at 512², with the same hold time and 4 patches on a 16× larger area. Hysteresis is reported, not tuned.
+- **Test 3, headless** (128², 1500 ticks, seeds 1–10): max pairwise |r| 0.109; wavelengths 11.8–12.6 cells, at most 4.7% from the median.
+- **Test 3, browser** (512², 6000 ticks): max |r| 0.052; wavelengths 12.0–12.2, at most 1.3% from the median.
+- **Capture and state, browser:** the PNG (239 KB) and WebM (17 MB, valid EBML header) download; the JSON export has the right values; re-import restored seed 4242 and F 0.05 and reset the run.
+- **Full browser suite after the M6 refactor:** 7 of 7 pass. Test 1 fell below 10% 0.5 s after the cut; test 8 held 60.0 fps; the smoke test had 2547 protocells at 60 fps. The overlay costs were measured with a CPU-heavy headless run going in parallel (flow +14.7%, network +13.2%, lineage +2.1%), so they are noisier than in M5. Flow and network stay off by default either way.
+- **Headless acceptance:** 7 of 8 pass. Test 6 still fails (frozen population; addressed next).
+
+Assumptions:
+- Tests 2 and 3 run field only (0 agents), because both concepts concern the field.
+- **"Wavelength stays within 15%":** every seed's wavelength is within ±15% of the median across seeds.
+- **Abrupt steps:** an order parameter below 0.001 counts as 0.001, so jumps between two near-uniform states are not reported as abrupt.
+- **Test 3 duration:** run for a fixed time per seed (1500 ticks headless, 6000 in the browser), long enough for Mitosis to fill the field at each size.
+- **Wavelength metric limit:** for patterns that do not fill the field (Worms and Chaos after 25 s), the largest-scale contrast dominates and the wavelength reads 512.
+
+## Energy-balance decision (user, 2026-10-20)
+
+Agents **may** erase the Gray–Scott pattern. Lower the seeded agents' break-even u from about 0.78 to about 0.5, so populations grow reliably at every size and test 6 becomes a real test. Next, after M6.
+
 ## Next
 
-1. Decide the energy-balance question under M3 (test 6 and the agent–pattern trade-off).
-2. M6: bifurcation panel, capture, JSON state, presets complete; gate tests 2 and 3.
+1. Apply the energy-balance decision above, then re-run the acceptance tests (test 6 in particular).

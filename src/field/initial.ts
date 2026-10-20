@@ -1,4 +1,4 @@
-import { mulberry32 } from '../util/prng';
+import { mulberry32, type Rng } from '../util/prng';
 
 /**
  * Initial Gray-Scott state as RGBA float data (u in R, v in G).
@@ -27,4 +27,21 @@ export function initialFieldData(size: number, seed: number, patches = 24): Floa
     }
   }
   return data;
+}
+
+/** A square patch of the autocatalytic species: centre and half side, in field cells. */
+export interface Patch {
+  cx: number;
+  cy: number;
+  half: number;
+}
+
+/**
+ * Seeded perturbation patches, the same size as the initial ones. The F sweep
+ * adds a few at the start of each step: without fluctuations the homogeneous
+ * state never leaves (SPEC.md section 2, order through fluctuations).
+ */
+export function perturbationPatches(size: number, rng: Rng, count: number): Patch[] {
+  const half = Math.max(2, Math.round(size / 85));
+  return Array.from({ length: count }, () => ({ cx: Math.floor(rng() * size), cy: Math.floor(rng() * size), half }));
 }

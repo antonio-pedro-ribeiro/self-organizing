@@ -181,3 +181,25 @@ void main() {
   outState = vec4(c, 0.0, 1.0);
 }
 `;
+
+/** Up to 8 square patches (centre, half side) set to u = 0.5, v = 0.25, wrapping on the torus. */
+export const PATCH_FRAG = `#version 300 es
+precision highp float;
+uniform sampler2D uState;
+uniform vec3 uPatches[8];
+uniform int uCount;
+uniform float uSize;
+out vec4 outState;
+
+void main() {
+  vec2 c = texelFetch(uState, ivec2(gl_FragCoord.xy), 0).rg;
+  vec2 p = floor(gl_FragCoord.xy);
+  for (int i = 0; i < 8; i++) {
+    if (i >= uCount) break;
+    vec2 d = abs(p - uPatches[i].xy);
+    d = min(d, uSize - d);
+    if (d.x <= uPatches[i].z && d.y <= uPatches[i].z) c = vec2(0.5, 0.25);
+  }
+  outState = vec4(c, 0.0, 1.0);
+}
+`;
