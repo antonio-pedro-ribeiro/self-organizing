@@ -1,16 +1,14 @@
 # Progress
 
-## M1 Field: code complete, gate NOT yet verified
+## M1 Field: gate passed
 
 Built: Vite and strict TypeScript scaffold, GPU Gray–Scott (RGBA32F ping-pong, 9-point Laplacian, torus), Catmull-Rom bicubic display with magma and viridis colormaps, Tweakpane controls (preset, F, k, cut flux, pause, single step, steps per frame, speed, seed, reset, colormap, v scale), eased parameter changes (about 0.5 s), FPS readout, `H` to hide UI.
 
-**Not verified:** the M1 gate ("patterns form and change with F and k; above 60 fps with field only"). The shaders have never been run in a browser. Run `npm run dev` and check three things: the shaders compile (an error shows on screen if not), spots grow and split from the seeds with the Mitosis preset, and the HUD shows 60 fps.
+**Gate:** the user confirmed the browser check on 2026-10-20 (shaders compile, Mitosis spots form, 60 fps, patterns change with F and k).
 
-**Fixed during M2:** the Laplacian used weights (−1, 0.2, 0.05), which approximate 0.3·∇², so effective diffusion was about 0.3× the spec's Du and Dv. On the CPU mirror, Mitosis spots never grew: about 4% coverage after 16,000 steps. The stencil is now normalised (−10/3, 2/3, 1/6). With it, spots spread to about 34% coverage. The weights live in `LAPLACIAN` in `src/field/presets.ts`, shared by the shader and the CPU field. This changes what the browser shows, so the M1 check above should use the fixed version.
+**Fixed during M2:** the Laplacian used weights (−1, 0.2, 0.05), which approximate 0.3·∇², so effective diffusion was about 0.3× the spec's Du and Dv. On the CPU mirror, Mitosis spots never grew: about 4% coverage after 16,000 steps. The stencil is now normalised (−10/3, 2/3, 1/6). With it, spots spread to about 34% coverage. The weights live in `LAPLACIAN` in `src/field/presets.ts`, shared by the shader and the CPU field. 
 
 ## M2 Agents (headless): gate passed
-
-M2 was started at the user's request while the M1 gate was still open. M2 is CPU-only and does not depend on the GPU path.
 
 Built:
 - `src/field/CpuField.ts`: CPU reference Gray–Scott, the same math as the shader. It implements the agents' `Environment` interface (nutrient, gradient, consume, emit).
@@ -38,6 +36,5 @@ In the control run the population hits the 5000 hard cap by about tick 200 and s
 
 ## Next
 
-1. Confirm the M1 gate in a real browser, with the stencil fix.
-2. Decide on carrying capacity (above).
-3. M3: field readback for sensing, consumption and signal write-back, instanced agent render, trails; tests 5 and 6.
+1. Decide on carrying capacity (above).
+2. M3: field readback for sensing, consumption and signal write-back, instanced agent render, trails; tests 5 and 6.
