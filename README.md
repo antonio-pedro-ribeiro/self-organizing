@@ -22,7 +22,7 @@ Keys: `H` hides all UI, `Space` pauses.
 | Dissipative structure | Turn on **cut flux**: the pattern decays when the feed stops; turn it off and it regrows from the remaining seeds | M1 |
 | Bifurcation | Drag **F** or **k** slowly, or switch presets: the field changes between spots, stripes and waves | M1 (automatic sweep panel in M6) |
 | Order through fluctuations | Change the **seed** and press **Reset with seed**: same parameters, different pattern details | M1 |
-| Autopoiesis | Protocells with production cut off disintegrate | M2–M3 |
+| Autopoiesis | Protocells with production cut off disintegrate (headless test 4 in M2; visible in M3) | M2–M3 |
 | Structural coupling | Same perturbation, different response per protocell | M3 |
 | Emergence | Colonies and fronts in the metrics | M3–M4 |
 | Cognition | Chemotaxis trajectories curve toward food | M3 |
@@ -31,7 +31,8 @@ Keys: `H` hides all UI, `Space` pauses.
 ## Layout
 
 ```
-src/field/    Gray–Scott on the GPU, presets, initial state
+src/field/    Gray–Scott on the GPU, CPU reference field, presets, initial state
+src/agents/   Protocell rules, population storage, spatial hash, headless world
 src/render/   WebGL helpers, field renderer, colormaps
 src/ui/       Tweakpane controls
 src/util/     Seeded PRNG

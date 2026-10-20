@@ -1,3 +1,7 @@
+import { LAPLACIAN } from './presets';
+
+const glslFloat = (x: number): string => x.toPrecision(9);
+
 /** Gray-Scott step: 9-point Laplacian on a torus, explicit Euler. u in R, v in G. */
 export const STEP_FRAG = `#version 300 es
 precision highp float;
@@ -17,9 +21,9 @@ vec2 at(ivec2 p) {
 void main() {
   ivec2 p = ivec2(gl_FragCoord.xy);
   vec2 c = at(p);
-  vec2 lap = -c
-    + 0.2 * (at(p + ivec2(1, 0)) + at(p + ivec2(-1, 0)) + at(p + ivec2(0, 1)) + at(p + ivec2(0, -1)))
-    + 0.05 * (at(p + ivec2(1, 1)) + at(p + ivec2(-1, 1)) + at(p + ivec2(1, -1)) + at(p + ivec2(-1, -1)));
+  vec2 lap = ${glslFloat(LAPLACIAN.centre)} * c
+    + ${glslFloat(LAPLACIAN.edge)} * (at(p + ivec2(1, 0)) + at(p + ivec2(-1, 0)) + at(p + ivec2(0, 1)) + at(p + ivec2(0, -1)))
+    + ${glslFloat(LAPLACIAN.corner)} * (at(p + ivec2(1, 1)) + at(p + ivec2(-1, 1)) + at(p + ivec2(1, -1)) + at(p + ivec2(-1, -1)));
   float uvv = c.x * c.y * c.y;
   float du = uDu * lap.x - uvv + uF * (1.0 - c.x);
   float dv = uDv * lap.y + uvv - (uF + uK) * c.y;

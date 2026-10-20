@@ -29,3 +29,10 @@ export const DU = 0.16;
 export const DV = 0.08;
 export const DT = 1;
 export const FIELD_SIZE = 512;
+
+/**
+ * Isotropic 9-point Laplacian, normalised so it approximates the true
+ * Laplacian (edge 2/3, corner 1/6, centre -10/3). Shared by the GPU shader and
+ * the CPU reference so the two stay identical.
+ */
+export const LAPLACIAN = { edge: 2 / 3, corner: 1 / 6, centre: -10 / 3 } as const;
